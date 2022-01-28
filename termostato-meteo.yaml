@@ -3,9 +3,12 @@ esphome:
   platform: ESP32
   board: esp32dev
   on_boot:
+#If you want to start thermostat in heat mode when it loose power uncomment the bottom lines
 #    - climate.control:
 #        id: termostato1
 #        mode: HEAT
+
+#This start the backlight subsystem
     - script.execute: backlight_timer
 
 # Enable logging
@@ -14,16 +17,17 @@ logger:
 # Enable Home Assistant API
 api:
   services:
-# Receive sound from homeassistant
+# Receive sound from homeassistant as service (only buzzer rtttl)
     - service: play_rtttl
       variables:
         song_str: string
       then:
         - rtttl.play:
             rtttl: !lambda 'return song_str;'
-
+#This enable firmware upload via ota
 ota:
 
+#This is the wifi block connection, change your wifi credential in secrets.yaml before tryng a firmware upload
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
@@ -31,20 +35,27 @@ wifi:
     ssid: "aztouch"
     password: !secret fallpass 
 
+#This enable the captive portal, if the esp32 cannot connect to existing wifi network
+#it create ad access point whin the "aztouch" ssid, you can connect it and tell to esp on wich wifi network it can connect by inserting the ssid and wpa password
+#Default esphome captive portal address is 192.168.4.1
 captive_portal:
 
+#This import arduinojson library for extract weather forecasts
 json:
 
+#This enable spi bus for diplay
 spi:
  clk_pin: 18
  mosi_pin: 23
  miso_pin: 19
 
+#This enable i2c bus for bme280 sensor
 i2c:
   - id: bus_a
     sda: 32
     scl: 25
 
+#This create the climate entity
 climate:
   - platform: thermostat
     visual:
@@ -52,11 +63,13 @@ climate:
       max_temperature: 30 °C
     name: Termostato
     id: termostato1
+    #Sensor declaration
     sensor: temp_int
     default_target_temperature_low: 18 °C
     min_heating_off_time: 30s
     min_heating_run_time: 30s
     min_idle_time: 30s
+    #I dont want a 220v relay on my hardware board so i deicided to use a shelly for activating my home gas heater this is the service to call on off of the shelly actuator. 
     heat_action:
       homeassistant.service:
         service: switch.turn_on
@@ -65,7 +78,8 @@ climate:
       homeassistant.service:
         service: switch.turn_off
         data: {entity_id: switch.shelly_caldaia}
-  
+
+#This enable the touch screen
 xpt2046:
   id: touchscreen
   cs_pin: 14 
@@ -79,6 +93,7 @@ xpt2046:
   calibration_y_min: 3800
   calibration_y_max: 441
   swap_x_y: true
+  #When the screen is touched turn on the backlight
   on_state:
     - script.stop: backlight_timer
     - script.execute: backlight_timer
@@ -91,9 +106,8 @@ xpt2046:
               id(touchscreen).y_raw
               );
 
-
+#Backlight pwm section
 output:
-#Backlight
   - platform: ledc
     pin: 15
     id: gpio_32_backlight_pwm
@@ -110,10 +124,8 @@ light:
     name: "Luce termostato"
     id: back_light
     restore_mode: ALWAYS_ON
-#    on_turn_on:
-#      - delay: 20s
-#      - light.turn_off: back_light
-#timer
+
+#This is the script for turn off the backlight after some seconds of inactivity
 script:
   id: backlight_timer
   then:
@@ -131,10 +143,12 @@ script:
 rtttl:
   output: rtttl_out
 
+#Import current time from Home Assistant
 time:
   - platform: homeassistant
     id: esptime
 
+#In my device i add a motion sensor for turn on the backlight automatically when i try to read monitor
 binary_sensor:
   - platform: gpio
     pin: 
@@ -146,16 +160,22 @@ binary_sensor:
     on_press:
       - script.stop: backlight_timer
       - script.execute: backlight_timer
+#This import heater entity from home assistant (is a shelly 1v3 that open or close the heater contact)
   - platform: homeassistant
     name: "Caldaia"
     entity_id: switch.shelly_caldaia
     id: sensor_caldaia
     internal: true
+
+#I have a shelly em for monitoring entire home and washing machine absorption in home assistant i added a template binary sensor for wanshing machine end cycle notification
+#This import this binary sensor for using it in the display section
 #Stato lavatrice
   - platform: homeassistant
     id: stato_e
     entity_id: binary_sensor.stato_operativo_elettrodomestico
     internal: yes
+
+#Virtual touch buttons on display
 #Touch key previous
   - platform: xpt2046
     xpt2046_id: touchscreen
@@ -232,19 +252,19 @@ binary_sensor:
 
 
 sensor:
-#Temp ext
+#Import external temperature
   - platform: homeassistant
     id: weather_temperature
     entity_id: weather.casa
     attribute: temperature
     internal: true
-#Wind
+#Import Wind
   - platform: homeassistant
     id: vento
     entity_id: weather.casa
     attribute: wind_speed
     internal: true
-#Humidity
+#Import external Humidity
   - platform: homeassistant
     id: umidita_ext
     entity_id: weather.casa
@@ -264,11 +284,14 @@ sensor:
       name: "Umidita"
       id: umidita_int
     update_interval: 20s
+
+#As said above this is another shelly em sensor for my home total absorpion
 #Total energy in kw/h
   - platform: homeassistant
     id: consumo_t
     entity_id: sensor.consumo_totale_power
     internal: true
+#Shelly em washing machine absorpion
 #Garage energy in kw/h
   - platform: homeassistant
     id: consumo_c
@@ -276,7 +299,7 @@ sensor:
     internal: true
 
 text_sensor:
-#Location
+#Import Location
   - platform: homeassistant
     id: weather_location
     entity_id: weather.casa
@@ -382,6 +405,7 @@ image:
     type: RGB24
     resize: ${icon_xy}
 
+#Color section for display rendering
 color:
   - id: my_red
     red: 100%
@@ -404,6 +428,7 @@ color:
     green: 50%
     blue: 50%
 
+#Font declaration
 font:
 #font date
   - file: 'fonts/Arial-Black.ttf'
@@ -494,6 +519,8 @@ font:
       - "\U000F059D" # weather-windy
       - "\U000F059E" # weather-windy-variant
 
+#This enable the lcd display and lamba
+#I addedd some map for helping translate some section like map condition and days of week
 display:
   - platform: ili9341
     model: TFT 2.4
@@ -635,7 +662,7 @@ display:
          //Weather today
          if (id(weather_condition).has_state())
          {
-           //Icon
+           //Icon of weather condition now
            it.image(0, h3, imgDict[id(weather_condition).state]);
            //Translated weather condition state as text
            it.printf(0, h1, id(font_small), id(my_gray), "%s", conDict[id(weather_condition).state]);
@@ -662,25 +689,25 @@ display:
            it.printf(w2, h7, id(sensor_font), "\U000F059D");
            it.printf(w2 +20, h7, id(font8),  id(my_gray), "%.0f km/h", id(vento).state);
          }
-         //Hum ext
+         //External humidity
          if (id(umidita_ext).has_state())
          {
            it.printf(w2, h6, id(sensor_font), "\U000F058E");
            it.printf(w2 +20, h6, id(font8), id(my_gray), "%.0f%%", id(umidita_ext).state);
          }
-         //Hum int
+         //Internal humidity
          if (id(umidita_int).has_state())
          {
            it.printf(w4, h6, id(sensor_font), "\U000F058E");
            it.printf(it.get_width(), h6, id(font8),  id(my_gray), TextAlign::TOP_RIGHT, "%.0f%%", id(umidita_int).state);
          }
-         //Press int
+         //Atmospheric pressure
          if (id(pressione_int).has_state())
          {
            it.printf(w4, h7 , id(sensor_font), "\U000F04C5");
            it.printf(it.get_width(), h7, id(font8),  id(my_gray), TextAlign::TOP_RIGHT, "%.0fb", id(pressione_int).state);
          }
-         //Forecast
+         //Imported forecast json deserialization
          if (id(forecast_5).has_state())
          {
           int wxx = 0;
@@ -729,7 +756,7 @@ display:
            forday += 1;
           }          
          }
-         //Icona caldaia
+         //Heater icon
          if ((id(termostato1).mode) == 0)
          {
            it.printf((it.get_width()/2), (it.get_height()-15), id(home_font), id(my_gray), TextAlign::BASELINE_CENTER, "\U000F0425");
@@ -741,9 +768,9 @@ display:
              it.printf((it.get_width()/2), (it.get_height()-15), id(home_font), id(my_gray), TextAlign::BASELINE_CENTER, "\U000F0238");
            }
          }
-         //Termostato
+         //Display thermostat desired temperature
          it.printf((it.get_width()/2), it.get_height(), id(font8),  id(my_red), TextAlign::BASELINE_CENTER, "%.0f°", id(termostato1).target_temperature);
-         //Icona Movimento
+         //When the motion sensor see something draw 2 eyes
          if (id(movimento).state) 
          {
            it.printf(it.get_width(), it.get_height(), id(home_font), id(my_red), TextAlign::BASELINE_RIGHT, "\U000F06D0");
@@ -754,7 +781,7 @@ display:
            //Minus key
            it.printf(0, it.get_height(), id(home_font), id(my_gray), TextAlign::BASELINE_LEFT, "\U000F0374");
          }
-         //Assorbimenti
+         //Total absorption icon and value
          if (id(consumo_t).has_state())
          {
            if (id(consumo_t).state < 2800)
@@ -766,6 +793,7 @@ display:
              it.printf((it.get_width()/2 -65), it.get_height(), id(font8),  id(my_red), TextAlign::BASELINE_CENTER, "%.0f W", id(consumo_t).state);
            }
          }
+         //Washing machine status and absorption value
          if (id(consumo_c).has_state())
          {
            if (id(stato_e).state)
