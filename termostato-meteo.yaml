@@ -1,0 +1,779 @@
+esphome:
+  name: termostato-meteo
+  platform: ESP32
+  board: esp32dev
+  on_boot:
+#    - climate.control:
+#        id: termostato1
+#        mode: HEAT
+    - script.execute: backlight_timer
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  services:
+# Receive sound from homeassistant
+    - service: play_rtttl
+      variables:
+        song_str: string
+      then:
+        - rtttl.play:
+            rtttl: !lambda 'return song_str;'
+
+ota:
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "aztouch"
+    password: !secret fallpass 
+
+captive_portal:
+
+json:
+
+spi:
+ clk_pin: 18
+ mosi_pin: 23
+ miso_pin: 19
+
+i2c:
+  - id: bus_a
+    sda: 32
+    scl: 25
+
+climate:
+  - platform: thermostat
+    visual:
+      min_temperature: 16 °C
+      max_temperature: 30 °C
+    name: Termostato
+    id: termostato1
+    sensor: temp_int
+    default_target_temperature_low: 18 °C
+    min_heating_off_time: 30s
+    min_heating_run_time: 30s
+    min_idle_time: 30s
+    heat_action:
+      homeassistant.service:
+        service: switch.turn_on
+        data: {entity_id: switch.shelly_caldaia}
+    idle_action:
+      homeassistant.service:
+        service: switch.turn_off
+        data: {entity_id: switch.shelly_caldaia}
+  
+xpt2046:
+  id: touchscreen
+  cs_pin: 14 
+  irq_pin: 27 
+  update_interval: 50ms
+  report_interval: 1s
+  dimension_x: 320
+  dimension_y: 240
+  calibration_x_min: 3575
+  calibration_x_max: 368
+  calibration_y_min: 3800
+  calibration_y_max: 441
+  swap_x_y: true
+  on_state:
+    - script.stop: backlight_timer
+    - script.execute: backlight_timer
+    - lambda: |-
+        if (touched)
+           ESP_LOGI("cal", "x=%d, y=%d, x_raw=%d, y_raw=%d",
+              id(touchscreen).x,
+              id(touchscreen).y,
+              id(touchscreen).x_raw,
+              id(touchscreen).y_raw
+              );
+
+
+output:
+#Backlight
+  - platform: ledc
+    pin: 15
+    id: gpio_32_backlight_pwm
+    inverted: true
+#Buzzer
+  - platform: ledc
+    pin: GPIO21
+    id: rtttl_out
+
+# Define a monochromatic, dimmable light for the backlight
+light:
+  - platform: monochromatic
+    output: gpio_32_backlight_pwm
+    name: "Luce termostato"
+    id: back_light
+    restore_mode: ALWAYS_ON
+#    on_turn_on:
+#      - delay: 20s
+#      - light.turn_off: back_light
+#timer
+script:
+  id: backlight_timer
+  then:
+  - light.turn_on:
+      id: back_light
+      brightness: 100%
+  - delay: 20s # timer length
+  - light.turn_on:
+      id: back_light
+      brightness: 50%
+  - delay: 40s
+  - light.turn_off: back_light
+
+#Buzzer
+rtttl:
+  output: rtttl_out
+
+time:
+  - platform: homeassistant
+    id: esptime
+
+binary_sensor:
+  - platform: gpio
+    pin: 
+      number: 26
+      mode: INPUT_PULLUP
+    device_class: motion    
+    id: movimento
+    name: Movimento
+    on_press:
+      - script.stop: backlight_timer
+      - script.execute: backlight_timer
+  - platform: homeassistant
+    name: "Caldaia"
+    entity_id: switch.shelly_caldaia
+    id: sensor_caldaia
+    internal: true
+#Stato lavatrice
+  - platform: homeassistant
+    id: stato_e
+    entity_id: binary_sensor.stato_operativo_elettrodomestico
+    internal: yes
+#Touch key previous
+  - platform: xpt2046
+    xpt2046_id: touchscreen
+    id: touch_key_previous
+    x_min: 0
+    x_max: 60
+    y_min: 0
+    y_max: 80
+    on_press:
+      - display.page.show_previous: tft_ha
+      - rtttl.play: 'one short:d=4,o=5,b=100:16e6'
+#Touch key next
+  - platform: xpt2046
+    xpt2046_id: touchscreen
+    id: touch_key_next
+    x_min: 255
+    x_max: 320
+    y_min: 0
+    y_max: 80
+    on_press:
+      - display.page.show_next: tft_ha
+      - rtttl.play: 'one short:d=4,o=5,b=100:16e6'
+#Touch key plus
+  - platform: xpt2046
+    xpt2046_id: touchscreen
+    id: touch_key_plus
+    x_min: 255
+    x_max: 320
+    y_min: 185
+    y_max: 240
+    on_press:
+      - climate.control:
+          id: termostato1
+          target_temperature: !lambda return (id(termostato1).target_temperature + 1.0);
+      - rtttl.play: 'one short:d=4,o=5,b=100:16e6'
+#Touch key minus
+  - platform: xpt2046
+    xpt2046_id: touchscreen
+    id: touch_key_minus
+    x_min: 0
+    x_max: 60
+    y_min: 185
+    y_max: 240
+    on_press:
+      - climate.control:
+          id: termostato1
+          target_temperature: !lambda return (id(termostato1).target_temperature - 1.0);
+      - rtttl.play: 'one short:d=4,o=5,b=100:16e6'
+#Touch key climate on/off
+  - platform: xpt2046
+    xpt2046_id: touchscreen
+    id: touch_key_climate
+    x_min: 110
+    x_max: 220
+    y_min: 196
+    y_max: 240
+    on_click:
+    #Thermostat on
+    - min_length: 50ms
+      max_length: 500ms
+      then:
+        - climate.control:
+            id: termostato1
+            mode: "HEAT"
+        - rtttl.play: 'one short:d=4,o=5,b=100:16e6'
+    #Thermostat off
+    - min_length: 1000ms
+      max_length: 5000ms
+      then:
+        - climate.control:
+            id: termostato1
+            mode: "OFF"
+        - rtttl.play: 'one short:d=4,o=5,b=100:16e6'
+
+
+sensor:
+#Temp ext
+  - platform: homeassistant
+    id: weather_temperature
+    entity_id: weather.casa
+    attribute: temperature
+    internal: true
+#Wind
+  - platform: homeassistant
+    id: vento
+    entity_id: weather.casa
+    attribute: wind_speed
+    internal: true
+#Humidity
+  - platform: homeassistant
+    id: umidita_ext
+    entity_id: weather.casa
+    attribute: humidity
+    internal: true
+#Bme280 internal sensor
+  - platform: bme280
+    address: 0x76
+    temperature:
+      name: "Temperatura"
+      id: temp_int
+      oversampling: 16x
+    pressure:
+      name: "Pressione"
+      id: pressione_int
+    humidity:
+      name: "Umidita"
+      id: umidita_int
+    update_interval: 20s
+#Total energy in kw/h
+  - platform: homeassistant
+    id: consumo_t
+    entity_id: sensor.consumo_totale_power
+    internal: true
+#Garage energy in kw/h
+  - platform: homeassistant
+    id: consumo_c
+    entity_id: sensor.consumo_cantina_power
+    internal: true
+
+text_sensor:
+#Location
+  - platform: homeassistant
+    id: weather_location
+    entity_id: weather.casa
+    attribute: friendly_name
+    internal: true
+
+#Weather condition now
+  - platform: homeassistant
+    id: weather_condition
+    entity_id: weather.casa
+    internal: true
+#5 Day forecast
+  - platform: homeassistant
+    id: forecast_5
+    entity_id: weather.casa
+    attribute: forecast
+    internal: yes
+
+#Weather now icon size
+substitutions:
+  icon_xy: '65x65'
+
+#Weather now images
+image:
+#0-default.png
+  - file: "images/0-default.png"
+    id: wpng_0
+    type: RGB24
+    resize: ${icon_xy}
+#1-clear-night.png
+  - file: "images/1-clear-night.png"
+    id: wpng_1
+    type: RGB24
+    resize: ${icon_xy}
+#2-cloudy.png
+  - file: "images/2-cloudy.png"
+    id: wpng_2
+    type: RGB24
+    resize: ${icon_xy}
+#3-fog.png
+  - file: "images/3-fog.png"
+    id: wpng_3
+    type: RGB24
+    resize: ${icon_xy}
+#4-hail.png
+  - file: "images/4-hail.png"
+    id: wpng_4
+    type: RGB24
+    resize: ${icon_xy}
+#5-lightning.png
+  - file: "images/5-lightning.png"
+    id: wpng_5
+    type: RGB24
+    resize: ${icon_xy}
+#6-lightning-rainy.png
+  - file: "images/6-lightning-rainy.png"
+    id: wpng_6
+    type: RGB24
+    resize: ${icon_xy}
+#7-partlycloudy.png
+  - file: "images/7-partlycloudy.png"
+    id: wpng_7
+    type: RGB24
+    resize: ${icon_xy}
+#8-pouring.png // rgb565
+  - file: "images/8-pouring.png"
+    id: wpng_8
+    type: RGB24
+    resize: ${icon_xy}
+#9-rainy.png
+  - file: "images/9-rainy.png"
+    id: wpng_9
+    type: RGB24
+    resize: ${icon_xy}
+#10-snowy.png
+  - file: "images/10-snowy.png"
+    id: wpng_10
+    type: RGB24
+    resize: ${icon_xy}
+#11-snowy-rainy.png // TODO: renable-when-RGB565-supported
+  - file: "images/11-snowy-rainy.png"
+    id: wpng_11
+    type: RGB24
+    resize: ${icon_xy}
+#12-sunny.png
+  - file: "images/12-sunny.png"
+    id: wpng_12
+    type: RGB24
+    resize: ${icon_xy}
+#13-windy.png
+  - file: "images/13-windy.png"
+    id: wpng_13
+    type: RGB24
+    resize: ${icon_xy}
+#14-windy-variant.png // TODO: renable-when-RGB565-supported
+  - file: "images/14-windy-variant.png"
+    id: wpng_14
+    type: RGB24
+    resize: ${icon_xy}
+#15-exceptional.png // TODO: renable-when-RGB565-supported
+  - file: "images/15-exceptional.png"
+    id: wpng_15
+    type: RGB24
+    resize: ${icon_xy}
+
+color:
+  - id: my_red
+    red: 100%
+    green: 0%
+    blue: 0%
+  - id: my_yellow
+    red: 100%
+    green: 100%
+    blue: 0%
+  - id: my_green
+    red: 0%
+    green: 100%
+    blue: 0%
+  - id: my_blue
+    red: 0%
+    green: 0%
+    blue: 100%
+  - id: my_gray
+    red: 50%
+    green: 50%
+    blue: 50%
+
+font:
+#font date
+  - file: 'fonts/Arial-Black.ttf'
+    id: font1
+    size: 18
+#Time
+  - file: 'fonts/BebasNeue-Regular.ttf'
+    id: font_clock
+    size: 40
+#Temperature
+  - file: 'fonts/BebasNeue-Regular.ttf'
+    id: font2
+    size: 45
+#Location sensors
+  - file: 'fonts/arial.ttf'
+    id: font8
+    size: 18
+# Day name in forecast
+  - file: 'fonts/Arial-Black.ttf'
+    id: font_small
+    size: 12
+#Forecast fonts
+  - file: 'fonts/arial.ttf'
+    id: font_small_1
+    size: 12
+#Font icon various sensor
+  - file: 'fonts/materialdesignicons-webfont.ttf'
+    id: sensor_font
+    size: 18
+    glyphs:
+      - "\U000F059D" # Vento
+      - "\U000F050F" # Temperatura
+      - "\U000F04C5" # Pressione
+      - "\U000F058E" # Umidita
+      - "\U000F0238" #Fuoco
+      - "\U000F0F55" #Termometro casa
+#Big icons other home stuff
+  - file: 'fonts/materialdesignicons-webfont.ttf'
+    id: home_font
+    size: 52
+    glyphs:
+      - "\U000F02DC" # A casa
+      - "\U000F0F9B" # Fuori Casa
+      - "\U000F0238" #Fuoco
+      - "\U000F072A" #Lavatrice on
+      - "\U000F11BD" #Lavatrice off
+      - "\U000F0100" #Camera on
+      - "\U000F05DF" #Camera off
+      - "\U000F0241" #Flash
+      - "\U000F0EF7" #Flash alert
+      - "\U000F06D0" #Eye
+      - "\U000F0425" #OFF
+      - "\U000F0415" #Plus
+      - "\U000F0374" #Minus
+#Forecast icons
+  - file: 'fonts/materialdesignicons-webfont.ttf'
+    id: weather_font
+    size: 50
+    glyphs:
+      - "\U000F0590" # weather-cloudy
+      - "\U000F0F2F" # weather-cloudy-alert
+      - "\U000F0E6E" # weather-cloudy-arrow-right
+      - "\U000F0591" # weather-fog
+      - "\U000F0592" # weather-hail
+      - "\U000F0F30" # weather-hazy
+      - "\U000F0898" # weather-hurricane
+      - "\U000F0593" # weather-lightning
+      - "\U000F067E" # weather-lightning-rainy
+      - "\U000F0594" # weather-night
+      - "\U000F0F31" # weather-night-partly-cloudy
+      - "\U000F0595" # weather-partly-cloudy
+      - "\U000F0F32" # weather-partly-lightning
+      - "\U000F0F33" # weather-partly-rainy
+      - "\U000F0F34" # weather-partly-snowy
+      - "\U000F0F35" # weather-partly-snowy-rainy
+      - "\U000F0596" # weather-pouring
+      - "\U000F0597" # weather-rainy
+      - "\U000F0598" # weather-snowy
+      - "\U000F0F36" # weather-snowy-heavy
+      - "\U000F067F" # weather-snowy-rainy
+      - "\U000F0599" # weather-sunny
+      - "\U000F0F37" # weather-sunny-alert
+      - "\U000F14E4" # weather-sunny-off
+      - "\U000F059A" # weather-sunset
+      - "\U000F059B" # weather-sunset-down
+      - "\U000F059C" # weather-sunset-up
+      - "\U000F0F38" # weather-tornado
+      - "\U000F059D" # weather-windy
+      - "\U000F059E" # weather-windy-variant
+
+display:
+  - platform: ili9341
+    model: TFT 2.4
+    cs_pin: 5 
+    dc_pin: 4 
+    led_pin: 15 
+    reset_pin: 22 
+    rotation: 90
+    id: tft_ha      
+    pages:
+      - id: page1
+        lambda: |-
+         //Map icons//
+         std::map<std::string, Image *> imgDict;
+         imgDict["clear-night"] = id(wpng_1);
+         imgDict["cloudy"] = id(wpng_2);
+         imgDict["fog"] = id(wpng_3);
+         imgDict["hail"] = id(wpng_4);
+         imgDict["lightning"] = id(wpng_5);
+         imgDict["lightning-rainy"] = id(wpng_6);
+         imgDict["partlycloudy"] = id(wpng_7);
+         imgDict["pouring"] = id(wpng_8);
+         imgDict["rainy"] = id(wpng_9);
+         imgDict["snowy"] = id(wpng_10);
+         imgDict["snowy-rainy"] = id(wpng_11);
+         imgDict["sunny"] = id(wpng_12);
+         imgDict["windy"] = id(wpng_13);
+         imgDict["windy-variant"] = id(wpng_14);
+         imgDict["exceptional"] = id(wpng_15);
+         imgDict[""] = id(wpng_0);
+         
+         //Map condition//
+         std::map<std::string, const char *> conDict;
+         conDict["clear-night"] = "Notte serena";
+         conDict["cloudy"] = "Nuvoloso";
+         conDict["fog"] = "Nebbia";
+         conDict["hail"] = "Nevischio";
+         conDict["lightning"] = "Fulmini";
+         conDict["lightning-rainy"] = "Fulmini/pioggia";
+         conDict["partlycloudy"] = "Parz. Nuv.";
+         conDict["pouring"] = "Rovescio";
+         conDict["rainy"] = "Pioggia";
+         conDict["snowy"] = "Neve";
+         conDict["snowy-rainy"] = "Neve/pioggia";
+         conDict["sunny"] = "Sereno";
+         conDict["windy"] = "Vento";
+         conDict["windy-variant"] = "Vento forte";
+         conDict["exceptional"] = "Eccezionale";
+         conDict[""] = "Sconosciuto";
+         
+         //Map weather fonts//
+         std::map<std::string, const char *> fonDict;
+         fonDict["clear-night"] = "\U000F0594";
+         fonDict["cloudy"] = "\U000F0590";
+         fonDict["fog"] = "\U000F0591";
+         fonDict["hail"] = "\U000F0592";
+         fonDict["lightning"] = "\U000F0593";
+         fonDict["lightning-rainy"] = "\U000F067E";
+         fonDict["partlycloudy"] = "\U000F0595";
+         fonDict["pouring"] = "\U000F0596";
+         fonDict["rainy"] = "\U000F0597";
+         fonDict["snowy"] = "\U000F0598";
+         fonDict["snowy-rainy"] = "\U000F067F";
+         fonDict["sunny"] = "\U000F0599";
+         fonDict["windy"] = "\U000F059D";
+         fonDict["windy-variant"] = "\U000F059E";
+         fonDict["exceptional"] = "";
+         
+         //Map days of week//
+         std::map<int, const char *> dayDict;
+         dayDict[1] = "Dom";
+         dayDict[2] = "Lun";
+         dayDict[3] = "Mar";
+         dayDict[4] = "Mer";
+         dayDict[5] = "Gio";
+         dayDict[6] = "Ven";
+         dayDict[7] = "Sab";
+         
+         //Map days of week extended//
+         std::map<int, const char *> dayDict_ext;
+         dayDict_ext[1] = "Domenica";
+         dayDict_ext[2] = "Lunedi";
+         dayDict_ext[3] = "Martedi";
+         dayDict_ext[4] = "Mercoledi";
+         dayDict_ext[5] = "Giovedi";
+         dayDict_ext[6] = "Venerdi";
+         dayDict_ext[7] = "Sabato";
+         
+         //Map month//
+         std::map<int, const char *> monDict;
+         monDict[1] = "Gennaio";
+         monDict[2] = "Febbraio";
+         monDict[3] = "Marzo";
+         monDict[4] = "Aprile";
+         monDict[5] = "Maggio";
+         monDict[6] = "Giugno";
+         monDict[7] = "Luglio";
+         monDict[8] = "Agosto";
+         monDict[9] = "Settembre";
+         monDict[10] = "Ottobre";
+         monDict[11] = "Novembre";
+         monDict[12] = "Dicembre";
+         
+         //Today weekday as number
+         int day = id(esptime).now().day_of_week;
+         //Month as number
+         auto month = id(esptime).now().month;
+         //Day of month as number
+         auto dom = id(esptime).now().day_of_month;
+         
+         //Height 1 day of week, day of month, month
+         int h1 = 0;
+         //Height 2 time
+         int h2 = 5;
+         //Height 3 weather icons, location, home name
+         int h3 = 18;
+         //Height 4 temperature ext, int, 
+         int h4 = 30;
+         //Heiht 6 humidity ext, int
+         int h6 = 50;
+         //Height 7 wind, Pressure int
+         int h7 = 65;
+         //Height wy forecast
+         int wy = 85;
+         //Width wx forecast
+         int wx = 32;
+         //Width 1 Weather location name, outside temp
+         int w1 = 70;
+         //Width 2 Outside sensor icon
+         int w2 = 115;  
+         //Width 3 Home name, home temperature
+         int w3 = 200;
+         //Width 4 Home sensor icon
+         int w4 = 250;
+         
+         //Time
+         it.printf((it.get_width()/2), h1, id(font1), id(my_gray), TextAlign::TOP_CENTER, "%s %i %s", dayDict[day], dom, monDict[month]);
+         it.strftime(it.get_width(), h2, id(font_clock), TextAlign::TOP_RIGHT, "%H:%M", id(esptime).now());
+         //Weather today
+         if (id(weather_condition).has_state())
+         {
+           //Icon
+           it.image(0, h3, imgDict[id(weather_condition).state]);
+           //Translated weather condition state as text
+           it.printf(0, h1, id(font_small), id(my_gray), "%s", conDict[id(weather_condition).state]);
+         }
+         //Outside temp
+         if (id(weather_temperature).has_state())
+         {
+          it.printf(w1, h4, id(font2),  id(my_blue), "%.0f°", id(weather_temperature).state);
+         }
+         //Location
+         if (id(weather_location).has_state())
+         {
+          it.printf(w1, h3, id(font8), id(my_blue), "%s", id(weather_location).state.c_str());
+         }
+         //Inside temp
+         if (id(temp_int).has_state()) 
+         {
+           it.printf(w3, h3, id(font8), id(my_red), "Casa");
+           it.printf(w3, h4, id(font2),  id(my_red), "%.0f°", id(temp_int).state);
+         }
+         //Today wind
+         if (id(vento).has_state())
+         {
+           it.printf(w2, h7, id(sensor_font), "\U000F059D");
+           it.printf(w2 +20, h7, id(font8),  id(my_gray), "%.0f km/h", id(vento).state);
+         }
+         //Hum ext
+         if (id(umidita_ext).has_state())
+         {
+           it.printf(w2, h6, id(sensor_font), "\U000F058E");
+           it.printf(w2 +20, h6, id(font8), id(my_gray), "%.0f%%", id(umidita_ext).state);
+         }
+         //Hum int
+         if (id(umidita_int).has_state())
+         {
+           it.printf(w4, h6, id(sensor_font), "\U000F058E");
+           it.printf(it.get_width(), h6, id(font8),  id(my_gray), TextAlign::TOP_RIGHT, "%.0f%%", id(umidita_int).state);
+         }
+         //Press int
+         if (id(pressione_int).has_state())
+         {
+           it.printf(w4, h7 , id(sensor_font), "\U000F04C5");
+           it.printf(it.get_width(), h7, id(font8),  id(my_gray), TextAlign::TOP_RIGHT, "%.0fb", id(pressione_int).state);
+         }
+         //Forecast
+         if (id(forecast_5).has_state())
+         {
+          int wxx = 0;
+          int wyy = 0;
+          int forday = 1;
+          DynamicJsonDocument doc(2048);
+          deserializeJson(doc, (id(forecast_5).state.c_str()));
+          JsonArray root = doc.as<JsonArray>();
+          for (int i=0; i <= 3; ++i)
+           {
+           JsonObject root_0 = root[i];
+           if (i == 0) {wxx = wx;}
+           if (i == 0) {wyy = wy;}
+           if (i == 0) {forday = (id(esptime).now().day_of_week +1);
+           }
+           if (forday == 8)
+           {
+             forday = 1;
+           }
+           //Day 3-4 go down 
+           //if (i == 2) {wyy += 38;}
+           //if (i == 2) {wxx = 0;}
+           std::string root_0_condition = root_0["condition"];
+           float root_0_precipitation = root_0["precipitation"];
+           float root_0_temperature = root_0["temperature"];
+           float root_0_templow = root_0["templow"];
+           //std::string root_0_datetime = root_0["datetime"];
+           //int root_0_wind_bearing = root_0["wind_bearing"];
+           //float root_0_wind_speed = root_0["wind_speed"];
+           
+           //Print to screen
+           //Translated day
+           it.printf(wxx, wyy, id(font_small), id(my_green), TextAlign::TOP_CENTER, "%s", dayDict_ext[forday]);
+           //Icon condition
+           it.printf(wxx, wyy +12, id(weather_font), TextAlign::TOP_CENTER, "%s", fonDict[root_0_condition.c_str()]);
+           //Temp max
+           it.printf(wxx, wyy+60, id(font_small_1), TextAlign::TOP_CENTER, "max %.0f°", root_0_temperature);
+           //Temp min
+           it.printf(wxx, wyy+70, id(font_small_1), TextAlign::TOP_CENTER, "min %.0f°", root_0_templow);
+           //Rain in mm
+           it.printf(wxx, wyy+80, id(font_small_1), TextAlign::TOP_CENTER, "%.0f mm", root_0_precipitation);
+           //lines
+           it.line(0, wy, it.get_width(), wy);
+           it.line(0, wy+95, it.get_width(), wy+95);
+           wxx += 85;
+           forday += 1;
+          }          
+         }
+         //Icona caldaia
+         if ((id(termostato1).mode) == 0)
+         {
+           it.printf((it.get_width()/2), (it.get_height()-15), id(home_font), id(my_gray), TextAlign::BASELINE_CENTER, "\U000F0425");
+         } else {
+           if (id(sensor_caldaia).state) 
+           {
+             it.printf((it.get_width()/2), (it.get_height()-15), id(home_font), id(my_red), TextAlign::BASELINE_CENTER, "\U000F0238");
+           } else {
+             it.printf((it.get_width()/2), (it.get_height()-15), id(home_font), id(my_gray), TextAlign::BASELINE_CENTER, "\U000F0238");
+           }
+         }
+         //Termostato
+         it.printf((it.get_width()/2), it.get_height(), id(font8),  id(my_red), TextAlign::BASELINE_CENTER, "%.0f°", id(termostato1).target_temperature);
+         //Icona Movimento
+         if (id(movimento).state) 
+         {
+           it.printf(it.get_width(), it.get_height(), id(home_font), id(my_red), TextAlign::BASELINE_RIGHT, "\U000F06D0");
+           it.printf(0, it.get_height(), id(home_font), id(my_red), TextAlign::BASELINE_LEFT, "\U000F06D0");
+         } else {
+           //Plus Key
+           it.printf(it.get_width(), it.get_height(), id(home_font), id(my_gray), TextAlign::BASELINE_RIGHT, "\U000F0415");
+           //Minus key
+           it.printf(0, it.get_height(), id(home_font), id(my_gray), TextAlign::BASELINE_LEFT, "\U000F0374");
+         }
+         //Assorbimenti
+         if (id(consumo_t).has_state())
+         {
+           if (id(consumo_t).state < 2800)
+           {
+             it.printf((it.get_width()/2 -65), (it.get_height()-15), id(home_font), id(my_gray), TextAlign::BASELINE_CENTER, "\U000F0241");
+             it.printf((it.get_width()/2 -65), it.get_height(), id(font8),  id(my_blue), TextAlign::BASELINE_CENTER, "%.0f W", id(consumo_t).state);
+           } else {
+             it.printf((it.get_width()/2 -65), (it.get_height()-15), id(home_font), id(my_red), TextAlign::BASELINE_CENTER, "\U000F0241");
+             it.printf((it.get_width()/2 -65), it.get_height(), id(font8),  id(my_red), TextAlign::BASELINE_CENTER, "%.0f W", id(consumo_t).state);
+           }
+         }
+         if (id(consumo_c).has_state())
+         {
+           if (id(stato_e).state)
+           {
+             it.printf((it.get_width()/2 +65), (it.get_height()-15), id(home_font), id(my_red), TextAlign::BASELINE_CENTER, "\U000F072A");
+             it.printf((it.get_width()/2 +65), it.get_height(), id(font8),  id(my_red), TextAlign::BASELINE_CENTER, "%.0f W", id(consumo_c).state);
+           } else {
+             it.printf((it.get_width()/2 +65), (it.get_height()-15), id(home_font), id(my_gray), TextAlign::BASELINE_CENTER, "\U000F11BD");
+             it.printf((it.get_width()/2 +65), it.get_height(), id(font8),  id(my_blue), TextAlign::BASELINE_CENTER, "%.0f W", id(consumo_c).state);
+           }
+         }
