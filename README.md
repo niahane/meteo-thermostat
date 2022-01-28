@@ -1,1 +1,2 @@
 # meteo-thermostat
+test
