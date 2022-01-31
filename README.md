@@ -8,5 +8,8 @@ I added two sensors to the board, a bme280 to have temperature, humidity and pre
 ![bme280](https://github.com/niahane/meteo-thermostat/blob/7a2923ba1b6a4c6382c3172988ddbd63d4416278/readme_img/bme280.jpg)
 
 And a presence sensor to activate the backlight of the monitor so as not to be always turned on.
+![bme280](https://github.com/niahane/meteo-thermostat/blob/7a2923ba1b6a4c6382c3172988ddbd63d4416278/readme_img/rclw-0516.jpg)
 
-The operation should be quite simple, you have to adapt your entities in the code especially the actuator which allows you to turn the boiler and the weather entity on and off. In future versions I will use overrides to facilitate the insertion of these entities.
+The operation should be quite simple, you have to adapt your entities in the code especially the actuator which allows you to turn the boiler and the weather entity on and off. In future versions I will use esphome substitutions to facilitate the insertion of these entities.
+
+https://github.com/niahane/meteo-thermostat/blob/7a2923ba1b6a4c6382c3172988ddbd63d4416278/readme_img/video.mp4
