@@ -32,11 +32,11 @@ wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
   ap:
-    ssid: "aztouch"
+    ssid: "Meteo-thermo"
     password: !secret fallpass 
 
 #This enable the captive portal, if the esp32 cannot connect to existing wifi network
-#it create ad access point whin the "aztouch" ssid, you can connect it and tell to esp on wich wifi network it can connect by inserting the ssid and wpa password
+#it create ad access point whin the "Meteo-thermo" ssid, you can connect it and tell to esp on wich wifi network it can connect by inserting the ssid and wpa password
 #Default esphome captive portal address is 192.168.4.1
 captive_portal:
 
@@ -124,6 +124,7 @@ light:
     name: "Luce termostato"
     id: back_light
     restore_mode: ALWAYS_ON
+    internal: true
 
 #This is the script for turn off the backlight after some seconds of inactivity
 script:
@@ -379,7 +380,7 @@ image:
     id: wpng_10
     type: RGB24
     resize: ${icon_xy}
-#11-snowy-rainy.png // TODO: renable-when-RGB565-supported
+#11-snowy-rainy.png
   - file: "images/11-snowy-rainy.png"
     id: wpng_11
     type: RGB24
@@ -394,12 +395,12 @@ image:
     id: wpng_13
     type: RGB24
     resize: ${icon_xy}
-#14-windy-variant.png // TODO: renable-when-RGB565-supported
+#14-windy-variant.png
   - file: "images/14-windy-variant.png"
     id: wpng_14
     type: RGB24
     resize: ${icon_xy}
-#15-exceptional.png // TODO: renable-when-RGB565-supported
+#15-exceptional.png
   - file: "images/15-exceptional.png"
     id: wpng_15
     type: RGB24
@@ -459,30 +460,30 @@ font:
     id: sensor_font
     size: 18
     glyphs:
-      - "\U000F059D" # Vento
-      - "\U000F050F" # Temperatura
-      - "\U000F04C5" # Pressione
-      - "\U000F058E" # Umidita
-      - "\U000F0238" #Fuoco
-      - "\U000F0F55" #Termometro casa
+      - "\U000F059D" # Wind
+      - "\U000F050F" # Temperature
+      - "\U000F04C5" # Pression
+      - "\U000F058E" # Humidity
+      - "\U000F0238" # Fire
+      - "\U000F0F55" # Home thermometer
 #Big icons other home stuff
   - file: 'fonts/materialdesignicons-webfont.ttf'
     id: home_font
     size: 52
     glyphs:
-      - "\U000F02DC" # A casa
-      - "\U000F0F9B" # Fuori Casa
-      - "\U000F0238" #Fuoco
-      - "\U000F072A" #Lavatrice on
-      - "\U000F11BD" #Lavatrice off
-      - "\U000F0100" #Camera on
-      - "\U000F05DF" #Camera off
-      - "\U000F0241" #Flash
-      - "\U000F0EF7" #Flash alert
-      - "\U000F06D0" #Eye
-      - "\U000F0425" #OFF
-      - "\U000F0415" #Plus
-      - "\U000F0374" #Minus
+      - "\U000F02DC" # At home
+      - "\U000F0F9B" # Outside home
+      - "\U000F0238" # Fire
+      - "\U000F072A" # Washing machine on
+      - "\U000F11BD" # Washing machine off
+      - "\U000F0100" # Camera on
+      - "\U000F05DF" # Camera off
+      - "\U000F0241" # Flash
+      - "\U000F0EF7" # Flash alert
+      - "\U000F06D0" # Eye
+      - "\U000F0425" # OFF
+      - "\U000F0415" # Plus
+      - "\U000F0374" # Minus
 #Forecast icons
   - file: 'fonts/materialdesignicons-webfont.ttf'
     id: weather_font
