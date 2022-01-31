@@ -7,6 +7,10 @@ https://www.amazon.it/AZDelivery-AZ-Touch-custodie-pollici-ESP8266/dp/B081FC31Q5
 
 the initial idea was to create a thermostat with weather forecast, not finding any project that I liked I decided to write it myself. Some existing projects involved the creation of multiple entities in the home assistant for example "day 1" forecasts, "day 2" forecasts etc ... creating a big mess in the home assistant. Then normally home assistant records by default each value of each sensor in its database, this thing is not very emmc/sd friendly. So with the arduinojson library and with the help of a very capable C ++ friend we were able to unpack the forecast values directly on the esp without having to create any template in the home assistant.
 
+
+IMPORTANT:
+The last version of esphome uses arduinjson 6 so we had to reprogram all the json related section, make sure you have the latest version of esphome available otherwise you will get errors in compiling.
+
 I added two sensors to the board:
 A bme280 to have internal temperature, humidity and pressure.
 ![bme280](https://github.com/niahane/meteo-thermostat/blob/7a2923ba1b6a4c6382c3172988ddbd63d4416278/readme_img/bme280.jpg)
