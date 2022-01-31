@@ -11,7 +11,7 @@ I added two sensors to the board:
 A bme280 to have internal temperature, humidity and pressure.
 ![bme280](https://github.com/niahane/meteo-thermostat/blob/7a2923ba1b6a4c6382c3172988ddbd63d4416278/readme_img/bme280.jpg)
 
-And a presence sensor to activate the backlight of the monitor so as not to be always turned on.
+And a presence sensor to activate the backlight only on human presence.
 ![bme280](https://github.com/niahane/meteo-thermostat/blob/7a2923ba1b6a4c6382c3172988ddbd63d4416278/readme_img/rclw-0516.jpg)
 
 The operation should be quite simple, you have to adapt your entities in the code especially the actuator which allows you to turn the boiler/heater on/off and the weather entity ID. In future versions I will use esphome substitutions to facilitate the insertion of these entities. 
@@ -72,3 +72,26 @@ They will be represented on the lower part of the display as icons with their va
     entity_id: sensor.consumo_cantina_power <-Change this with your partial absorpion entity sensor like washing machine, diskwasher etc...
     internal: true
 ```
+
+I have created some C ++ dictionaries to help the user in translating days of the week, months and weather condition. Adapt them according to your language as well, an example:
+```
+         //Map condition//
+         std::map<std::string, const char *> conDict;
+         conDict["clear-night"] = "Notte serena";
+         conDict["cloudy"] = "Nuvoloso";
+         conDict["fog"] = "Nebbia";
+         conDict["hail"] = "Nevischio";
+         conDict["lightning"] = "Fulmini";
+         conDict["lightning-rainy"] = "Fulmini/pioggia";
+         conDict["partlycloudy"] = "Parz. Nuv.";
+         conDict["pouring"] = "Rovescio";
+         conDict["rainy"] = "Pioggia";
+         conDict["snowy"] = "Neve";
+         conDict["snowy-rainy"] = "Neve/pioggia";
+         conDict["sunny"] = "Sereno";
+         conDict["windy"] = "Vento";
+         conDict["windy-variant"] = "Vento forte";
+         conDict["exceptional"] = "Eccezionale";
+         conDict[""] = "Sconosciuto";
+```
+
