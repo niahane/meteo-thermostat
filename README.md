@@ -99,7 +99,7 @@ I have created some C ++ dictionaries to help the user in translating days of th
          conDict[""] = "Sconosciuto";
 ```
 With some adaptation the program can also work on other monitors:
-![other_esp}(https://github.com/niahane/meteo-thermostat/blob/ccecbf7e62d21f84fb1c07a17deb5a30e2a62981/readme_img/other-esp.jpg)
+![other_esp](https://github.com/niahane/meteo-thermostat/blob/ccecbf7e62d21f84fb1c07a17deb5a30e2a62981/readme_img/other-esp.jpg)
 
 Once the firmware has been compiled and installed, the use from the touch screen is very simple. A tap on the central power button turns on the thermostat, to decrease / increase the desired temperature use the touch keys + and -
 If the motion sensor sees something, the + and - buttons become two eyes for a few seconds.
