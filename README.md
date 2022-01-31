@@ -16,7 +16,9 @@ A bme280 to have internal temperature, humidity and pressure.
 ![bme280](https://github.com/niahane/meteo-thermostat/blob/7a2923ba1b6a4c6382c3172988ddbd63d4416278/readme_img/bme280.jpg)
 
 And a presence sensor to activate the backlight only on human presence.
-![bme280](https://github.com/niahane/meteo-thermostat/blob/7a2923ba1b6a4c6382c3172988ddbd63d4416278/readme_img/rclw-0516.jpg)
+![rclw](https://github.com/niahane/meteo-thermostat/blob/7a2923ba1b6a4c6382c3172988ddbd63d4416278/readme_img/rclw-0516.jpg)
+
+![aztouch1](https://github.com/niahane/meteo-thermostat/blob/474219cd6f2cac05c4dfb25d911a39c119f23d16/readme_img/aztouch1.jpg)
 
 The operation should be quite simple, you have to adapt your entities in the code especially the actuator which allows you to turn the boiler/heater on/off and the weather entity ID. In future versions I will use esphome substitutions to facilitate the insertion of these entities. 
 
