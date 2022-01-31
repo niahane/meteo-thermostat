@@ -58,7 +58,7 @@ sensor:
 #Import external temperature
   - platform: homeassistant
     id: weather_temperature
-    entity_id: weather.casa <-Replace this with your weather home assistant identity (probably met.no integration or openweathermaps)
+    entity_id: weather.casa <-Replace this with your weather home assistant entity (probably met.no integration or openweathermaps)
     attribute: temperature
     internal: true
 ```
