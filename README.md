@@ -94,4 +94,9 @@ I have created some C ++ dictionaries to help the user in translating days of th
          conDict["exceptional"] = "Eccezionale";
          conDict[""] = "Sconosciuto";
 ```
+With some adaptation the program can also work on other monitors:
+![other_esp}(https://github.com/niahane/meteo-thermostat/blob/ccecbf7e62d21f84fb1c07a17deb5a30e2a62981/readme_img/other-esp.jpg)
 
+I worked a lot on this program, it was also a way to learn some basic things about lambda (c ++) I hope you like it and that its code will help you in your projects. I'd love some feedback or suggestions from you, so keep me updated if you add more features! 
+I'm new to github I don't know if the "issue" section already works, if it doesn't work, please write to me at meconiotech@gmail.com
+Greetings from Niahane
