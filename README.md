@@ -101,6 +101,12 @@ I have created some C ++ dictionaries to help the user in translating days of th
 With some adaptation the program can also work on other monitors:
 ![other_esp}(https://github.com/niahane/meteo-thermostat/blob/ccecbf7e62d21f84fb1c07a17deb5a30e2a62981/readme_img/other-esp.jpg)
 
+Once the firmware has been compiled and installed, the use from the touch screen is very simple. A tap on the central power button turns on the thermostat, to decrease / increase the desired temperature use the touch keys + and -
+If the motion sensor sees something, the + and - buttons become two eyes for a few seconds.
+To turn off the thermostat, just press and hold the icon with the shape of a fire.
+If the boiler / heater is on the flame will turn red otherwise it will be gray.
+To avoid problems with the boiler, there is a minimum time in which it will be on, you will sometimes notice that by turning off the thermostat or decreasing the desired temperature, the boiler will remain on for a few seconds, this is intentional it prevents too many consecutive starts and stops which could damage it..
+
 I worked a lot on this program, it was also a way to learn some basic things about lambda (c ++) I hope you like it and that its code will help you in your projects. I'd love some feedback or suggestions from you, so keep me updated if you add more features! 
-I'm new to github I don't know if the "issue" section already works, if it doesn't work, please write to me at meconiotech@gmail.com
+I'm new to github I don't know if the "issue" section already works, if doesn't, please write to me at meconiotech@gmail.com
 Greetings from Niahane
