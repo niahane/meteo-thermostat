@@ -40,6 +40,18 @@ wifi:
 #Default esphome captive portal address is 192.168.4.1
 captive_portal:
 
+# Substitutions
+substitutions:
+# Heater entity from home assistant
+  heater: switch.shelly_caldaia
+# Weather entity from home assistant
+  weather_entity: weather.casa
+# Weather now icon size
+  icon_xy: '65x65'
+# Total consumption sensor to import from home assistant
+  tc: sensor.consumo_totale_power
+# Partial consumtion entity like washing machine etc to import from home assistant
+  pc: sensor.consumo_cantina_power
 #This import arduinojson library for extract weather forecasts
 json:
 
@@ -73,11 +85,11 @@ climate:
     heat_action:
       homeassistant.service:
         service: switch.turn_on
-        data: {entity_id: switch.shelly_caldaia}
+        data: {entity_id: "${heater}"}
     idle_action:
       homeassistant.service:
         service: switch.turn_off
-        data: {entity_id: switch.shelly_caldaia}
+        data: {entity_id: "${heater}"}
 
 #This enable the touch screen
 xpt2046:
@@ -161,10 +173,10 @@ binary_sensor:
     on_press:
       - script.stop: backlight_timer
       - script.execute: backlight_timer
-#This import heater entity from home assistant (is a shelly 1v3 that open or close the heater contact)
+#This import heater entity as sensor from home assistant (is a shelly 1v3 that open or close the heater contact)
   - platform: homeassistant
     name: "Caldaia"
-    entity_id: switch.shelly_caldaia
+    entity_id: ${heater}
     id: sensor_caldaia
     internal: true
 
@@ -256,19 +268,19 @@ sensor:
 #Import external temperature
   - platform: homeassistant
     id: weather_temperature
-    entity_id: weather.casa
+    entity_id: ${weather_entity}
     attribute: temperature
     internal: true
 #Import Wind
   - platform: homeassistant
     id: vento
-    entity_id: weather.casa
+    entity_id: ${weather_entity}
     attribute: wind_speed
     internal: true
 #Import external Humidity
   - platform: homeassistant
     id: umidita_ext
-    entity_id: weather.casa
+    entity_id: ${weather_entity}
     attribute: humidity
     internal: true
 #Bme280 internal sensor
@@ -290,38 +302,34 @@ sensor:
 #Total energy in kw/h
   - platform: homeassistant
     id: consumo_t
-    entity_id: sensor.consumo_totale_power
+    entity_id: ${tc}
     internal: true
 #Shelly em washing machine absorpion
 #Garage energy in kw/h
   - platform: homeassistant
     id: consumo_c
-    entity_id: sensor.consumo_cantina_power
+    entity_id: ${pc}
     internal: true
 
 text_sensor:
 #Import Location
   - platform: homeassistant
     id: weather_location
-    entity_id: weather.casa
+    entity_id: ${weather_entity}
     attribute: friendly_name
     internal: true
 
 #Weather condition now
   - platform: homeassistant
     id: weather_condition
-    entity_id: weather.casa
+    entity_id: ${weather_entity}
     internal: true
 #5 Day forecast
   - platform: homeassistant
     id: forecast_5
-    entity_id: weather.casa
+    entity_id: ${weather_entity}
     attribute: forecast
     internal: yes
-
-#Weather now icon size
-substitutions:
-  icon_xy: '65x65'
 
 #Weather now images
 image:
