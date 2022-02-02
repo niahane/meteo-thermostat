@@ -20,7 +20,7 @@ And a presence sensor to activate the backlight only on human presence.
 
 ![aztouch1](https://github.com/niahane/meteo-thermostat/blob/474219cd6f2cac05c4dfb25d911a39c119f23d16/readme_img/aztouch1.jpg)
 
-The operation should be quite simple, you have to adapt your entities in the code especially the actuator which allows you to turn the boiler/heater on/off and the weather entity ID. In future versions I will use esphome substitutions to facilitate the insertion of these entities. 
+The operation should be quite simple, you have to adapt your entities in the code especially the actuator which allows you to turn the boiler/heater on/off and the weather entity ID.
 
 It support touch screen and various home assistant sensors, the logic is all inside the esp32 so it should continue to work even in the absence of internet connection (the part concerning the thermostat) the desired temperature as well as the switching on / off of the thermostat can be entered from the touch screen or from the home assistant.
 ![hass](https://github.com/niahane/meteo-thermostat/blob/7e52d860cf970f4f9c97ee505d01e0b927ff10db/readme_img/hass_thermostat.jpg)
@@ -28,56 +28,33 @@ It support touch screen and various home assistant sensors, the logic is all ins
 A demostation video:
 https://github.com/niahane/meteo-thermostat/blob/7a2923ba1b6a4c6382c3172988ddbd63d4416278/readme_img/video.mp4?raw=true
 
-I didn't want to put a 220v relay on the board so I used a 1v3 shelly by importing from home assistant the shelly entity to turn on and off .
 
+I added the substitutions section fit entities with yours:
+
+Heater is the entity can be called from esp to turn on/on the heater/boiler in my case a shelly 1v3 because I didn't want to put a 220v relay on the board so I used a 1v3 shelly as external relay and calling in climate section the home assistant service for turn on/off the relay.
+
+Weather is the homeassistant weather entity for extracting weather conditions, forecasts... In my case "weather.casa"
+
+This program supports two optional power absorption sensors (tc is "total cosumpion", pc is "partial consumption") which will represent at the bottom of the screen as two icons with their watt values below. 
+For the partial consumption sensor a binary sensor is also needed to know the on / off status of the device
+see the yaml file code comments.
+If you do not have them you can also not change anything, they appear only if the sensor exists.
+```
+# Substitutions
+substitutions:
+# Heater entity from home assistant
+  heater: switch.shelly_caldaia <-must be replaced with your heater entity
+# Weather entity from home assistant
+  weather_entity: weather.casa <- must be replaced with your weather entity
+# Weather now icon size
+  icon_xy: '65x65'
+# Total consumption sensor to import from home assistant
+  tc: sensor.consumo_totale_power <- must be replaced with your total absorpion sensor entity (optional)
+# Partial consumtion entity like washing machine etc to import from home assistant
+  pc: sensor.consumo_cantina_power <- must be replaced with your partial absorpion sensor entity (optional)
+```
+Before try to compile the firmware you have to change the secret.yaml file to adapt your wifi network
 On first run the thermostat had to be added as esphome integration in home assistant.
-You have to change the secret.yaml file to adapt your wifi network
-
-This is the section need to be adapted with your boiler/heater entity:
-```
-    heat_action:
-      homeassistant.service:
-        service: switch.turn_on
-        data: {entity_id: switch.shelly_caldaia} <-Replace with your heater entity
-    idle_action:
-      homeassistant.service:
-        service: switch.turn_off
-        data: {entity_id: switch.shelly_caldaia} <-Replace with your heater entity
-```
-And this is only used to know the relay status:
-```
-  - platform: homeassistant
-    name: "Caldaia"
-    entity_id: switch.shelly_caldaia <-Replace with your heater entity
-    id: sensor_caldaia
-    internal: true
-```    
-You must also replace all weather entity in code matching your homeassistant weather entity:
-```
-sensor:
-#Import external temperature
-  - platform: homeassistant
-    id: weather_temperature
-    entity_id: weather.casa <-Replace this with your weather home assistant entity (probably met.no integration or openweathermaps)
-    attribute: temperature
-    internal: true
-```
-It supports also two power absorption optional entity.
-They will be represented on the lower part of the display as icons with their value at the bottom.
-```
-#Total energy in watt
-  - platform: homeassistant
-    id: consumo_t
-    entity_id: sensor.consumo_totale_power <-Change this with your total absorpion entity sensor
-    internal: true
-```    
-#Shelly em washing machine absorpion in watt
-```
-  - platform: homeassistant
-    id: consumo_c
-    entity_id: sensor.consumo_cantina_power <-Change this with your partial absorpion entity sensor like washing machine, diskwasher etc...
-    internal: true
-```
 
 I have created some C ++ dictionaries to help the user in translating days of the week, months and weather condition. Adapt them according to your language as well, an example:
 ```
