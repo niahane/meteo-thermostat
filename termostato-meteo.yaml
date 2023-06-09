@@ -669,12 +669,17 @@ display:
          it.printf((it.get_width()/2), h1, id(font1), id(my_gray), TextAlign::TOP_CENTER, "%s %i %s", dayDict[day], dom, monDict[month]);
          it.strftime(it.get_width(), h2, id(font_clock), TextAlign::TOP_RIGHT, "%H:%M", id(esptime).now());
          //Weather today
-         if (id(weather_condition).has_state())
+         if (conDict.count(id(weather_condition).state) > 0)
          {
            //Icon of weather condition now
            it.image(0, h3, imgDict[id(weather_condition).state]);
            //Translated weather condition state as text
            it.printf(0, h1, id(font_small), id(my_gray), "%s", conDict[id(weather_condition).state]);
+         } else {
+           //Icon of weather condition now
+           it.image(0, h3, imgDict["exceptional"]);
+           //Translated weather condition state as text
+           it.printf(0, h1, id(font_small), id(my_gray), "%s", conDict["exceptional"]);
          }
          //Outside temp
          if (id(weather_temperature).has_state())
@@ -751,7 +756,10 @@ display:
            //Translated day
            it.printf(wxx, wyy, id(font_small), id(my_green), TextAlign::TOP_CENTER, "%s", dayDict_ext[forday]);
            //Icon condition
+           if (fonDict.count(root_0_condition) > 0)
+           {
            it.printf(wxx, wyy +12, id(weather_font), TextAlign::TOP_CENTER, "%s", fonDict[root_0_condition.c_str()]);
+           }
            //Temp max
            it.printf(wxx, wyy+60, id(font_small_1), TextAlign::TOP_CENTER, "max %.0f°", root_0_temperature);
            //Temp min
