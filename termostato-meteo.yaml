@@ -543,7 +543,7 @@ display:
       - id: page1
         lambda: |-
          //Map icons//
-         std::map<std::string, Image *> imgDict;
+         std::map<std::string, image::Image *> imgDict;
          imgDict["clear-night"] = id(wpng_1);
          imgDict["cloudy"] = id(wpng_2);
          imgDict["fog"] = id(wpng_3);
