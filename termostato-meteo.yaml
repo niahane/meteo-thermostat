@@ -3,6 +3,7 @@ esphome:
   platform: ESP32
   board: esp32dev
   on_boot:
+
 #If you want to start thermostat in heat mode when it loose power uncomment the bottom lines
 #    - climate.control:
 #        id: termostato1
@@ -11,19 +12,42 @@ esphome:
 #This start the backlight subsystem
     - script.execute: backlight_timer
 
+#Substitutions
+substitutions:
+#Set here your entities
+# Heater entity from home assistant, in my case i used a Shelly 1v3 for open/close contact of my house gas heater.
+#You can also use a relay connected to a gpio but I do not recommend it especially if the load is alternating current the absorption peaks could glue the contacts of the cheap relays.
+#I also noticed that the electromagnetic peak sometimes crashes the esp32. Since we are talking about a delicated system like a gas heater, it is better to opt for a certified device.
+  heater: switch.shelly_caldaia
+# Weather entity from home assistant
+  weather_entity: weather.casa
+# Total consumption sensor to import from home assistant i have a Shelly em with 2 amperomeric sensor, this is the first and grab the phase exiting from my energy grid
+  tc: sensor.consumo_totale_power
+# Partial consumtion entity like washing machine etc to import from home assistant this is my second amperometric sensor and grab the phase of my garage
+  pc: sensor.consumo_cantina_power
+#Weather now icon size
+  icon_xy: '65x65'
+
 # Enable logging
 logger:
+  logs:
+    component: ERROR
 
 # Enable Home Assistant API
 api:
   services:
-# Receive sound from homeassistant as service (only buzzer rtttl)
+  # Receive sound from homeassistant as service (only buzzer rtttl)
     - service: play_rtttl
       variables:
         song_str: string
       then:
         - rtttl.play:
             rtttl: !lambda 'return song_str;'
+
+#Buzzer
+rtttl:
+  output: rtttl_out
+
 #This enable firmware upload via ota
 ota:
 
@@ -40,18 +64,6 @@ wifi:
 #Default esphome captive portal address is 192.168.4.1
 captive_portal:
 
-# Substitutions
-substitutions:
-# Heater entity from home assistant
-  heater: switch.shelly_caldaia
-# Weather entity from home assistant
-  weather_entity: weather.casa
-# Weather now icon size
-  icon_xy: '65x65'
-# Total consumption sensor to import from home assistant
-  tc: sensor.consumo_totale_power
-# Partial consumtion entity like washing machine etc to import from home assistant
-  pc: sensor.consumo_cantina_power
 #This import arduinojson library for extract weather forecasts
 json:
 
@@ -75,56 +87,52 @@ climate:
       max_temperature: 30 °C
     name: Termostato
     id: termostato1
-    #Sensor declaration
     sensor: temp_int
-    default_target_temperature_low: 18 °C
     min_heating_off_time: 30s
     min_heating_run_time: 30s
     min_idle_time: 30s
-    #I dont want a 220v relay on my hardware board so i deicided to use a shelly for activating my home gas heater this is the service to call on off of the shelly actuator. 
+    #This is the service to call on off of the Shelly 1v3 actuator.
     heat_action:
       homeassistant.service:
         service: switch.turn_on
-        data: {entity_id: "${heater}"}
+        data: {entity_id: $heater}
     idle_action:
       homeassistant.service:
         service: switch.turn_off
-        data: {entity_id: "${heater}"}
+        data: {entity_id: $heater}
 
 #This enable the touch screen
-xpt2046:
-  id: touchscreen
+touchscreen:
+  platform: xpt2046
+  id: xpt2046_touch
   cs_pin: 14 
-  irq_pin: 27 
+  interrupt_pin: 27 
   update_interval: 50ms
   report_interval: 1s
-  dimension_x: 320
-  dimension_y: 240
   calibration_x_min: 3575
   calibration_x_max: 368
   calibration_y_min: 3800
   calibration_y_max: 441
-  swap_x_y: true
   #When the screen is touched turn on the backlight
-  on_state:
+  on_touch:
     - script.stop: backlight_timer
     - script.execute: backlight_timer
-    - lambda: |-
-        if (touched)
-           ESP_LOGI("cal", "x=%d, y=%d, x_raw=%d, y_raw=%d",
-              id(touchscreen).x,
-              id(touchscreen).y,
-              id(touchscreen).x_raw,
-              id(touchscreen).y_raw
-              );
+  #Uncomment for calibrations
+  #  - lambda: |-
+  #        ESP_LOGI("cal", "x=%d, y=%d, x_raw=%d, y_raw=%0d",
+  #            id(xpt2046_touch).x,
+  #            id(xpt2046_touch).y,
+  #            id(xpt2046_touch).x_raw,
+  #            id(xpt2046_touch).y_raw
+  #            );
 
-#Backlight pwm section
 output:
+  #Backlight pwm section
   - platform: ledc
     pin: 15
-    id: gpio_32_backlight_pwm
+    id: backlight_pwm
     inverted: true
-#Buzzer
+  #Buzzer
   - platform: ledc
     pin: GPIO21
     id: rtttl_out
@@ -132,7 +140,7 @@ output:
 # Define a monochromatic, dimmable light for the backlight
 light:
   - platform: monochromatic
-    output: gpio_32_backlight_pwm
+    output: backlight_pwm
     name: "Luce termostato"
     id: back_light
     restore_mode: ALWAYS_ON
@@ -145,16 +153,12 @@ script:
   - light.turn_on:
       id: back_light
       brightness: 100%
-  - delay: 20s # timer length
+  - delay: 20s
   - light.turn_on:
       id: back_light
       brightness: 50%
   - delay: 40s
   - light.turn_off: back_light
-
-#Buzzer
-rtttl:
-  output: rtttl_out
 
 #Import current time from Home Assistant
 time:
@@ -173,78 +177,44 @@ binary_sensor:
     on_press:
       - script.stop: backlight_timer
       - script.execute: backlight_timer
-#This import heater entity as sensor from home assistant (is a shelly 1v3 that open or close the heater contact)
+#This import heater entity from home assistant (it is a shelly 1v3 that open or close the heater contact)
   - platform: homeassistant
     name: "Caldaia"
-    entity_id: ${heater}
+    entity_id: $heater
     id: sensor_caldaia
     internal: true
-
-#I have a shelly em for monitoring entire home and washing machine absorption in home assistant i added a template binary sensor for wanshing machine end cycle notification
-#This import this binary sensor for using it in the display section
-#Stato lavatrice
-  - platform: homeassistant
-    id: stato_e
-    entity_id: binary_sensor.stato_operativo_elettrodomestico
-    internal: yes
-
 #Virtual touch buttons on display
-#Touch key previous
-  - platform: xpt2046
-    xpt2046_id: touchscreen
-    id: touch_key_previous
-    x_min: 0
-    x_max: 60
-    y_min: 0
-    y_max: 80
-    on_press:
-      - display.page.show_previous: tft_ha
-      - rtttl.play: 'one short:d=4,o=5,b=100:16e6'
-#Touch key next
-  - platform: xpt2046
-    xpt2046_id: touchscreen
-    id: touch_key_next
-    x_min: 255
-    x_max: 320
-    y_min: 0
-    y_max: 80
-    on_press:
-      - display.page.show_next: tft_ha
-      - rtttl.play: 'one short:d=4,o=5,b=100:16e6'
 #Touch key plus
-  - platform: xpt2046
-    xpt2046_id: touchscreen
+  - platform: touchscreen
     id: touch_key_plus
-    x_min: 255
+    x_min: 250
     x_max: 320
-    y_min: 185
-    y_max: 240
+    y_min: 0
+    y_max: 60
     on_press:
       - climate.control:
           id: termostato1
-          target_temperature: !lambda return (id(termostato1).target_temperature + 1.0);
+          target_temperature: !lambda return (id(termostato1).target_temperature + 0.5);
       - rtttl.play: 'one short:d=4,o=5,b=100:16e6'
 #Touch key minus
-  - platform: xpt2046
-    xpt2046_id: touchscreen
+  - platform: touchscreen
     id: touch_key_minus
     x_min: 0
     x_max: 60
-    y_min: 185
-    y_max: 240
+    y_min: 0
+    y_max: 60
     on_press:
       - climate.control:
           id: termostato1
-          target_temperature: !lambda return (id(termostato1).target_temperature - 1.0);
+          target_temperature: !lambda return (id(termostato1).target_temperature - 0.5);
       - rtttl.play: 'one short:d=4,o=5,b=100:16e6'
 #Touch key climate on/off
-  - platform: xpt2046
-    xpt2046_id: touchscreen
+  - platform: touchscreen
     id: touch_key_climate
     x_min: 110
     x_max: 220
-    y_min: 196
-    y_max: 240
+    y_min: 0
+    y_max: 60
     on_click:
     #Thermostat on
     - min_length: 50ms
@@ -263,24 +233,24 @@ binary_sensor:
             mode: "OFF"
         - rtttl.play: 'one short:d=4,o=5,b=100:16e6'
 
-
+#Int sensor section import and declarations
 sensor:
 #Import external temperature
   - platform: homeassistant
     id: weather_temperature
-    entity_id: ${weather_entity}
+    entity_id: $weather_entity
     attribute: temperature
     internal: true
 #Import Wind
   - platform: homeassistant
     id: vento
-    entity_id: ${weather_entity}
+    entity_id: $weather_entity
     attribute: wind_speed
     internal: true
 #Import external Humidity
   - platform: homeassistant
     id: umidita_ext
-    entity_id: ${weather_entity}
+    entity_id: $weather_entity
     attribute: humidity
     internal: true
 #Bme280 internal sensor
@@ -297,39 +267,43 @@ sensor:
       name: "Umidita"
       id: umidita_int
     update_interval: 20s
-
-#As said above this is another shelly em sensor for my home total absorpion
+#Shelly em sensor for my home total absorpion
 #Total energy in kw/h
   - platform: homeassistant
     id: consumo_t
-    entity_id: ${tc}
+    entity_id: $tc
     internal: true
 #Shelly em washing machine absorpion
 #Garage energy in kw/h
   - platform: homeassistant
     id: consumo_c
-    entity_id: ${pc}
+    entity_id: $pc
     internal: true
 
+#String sensor import
 text_sensor:
 #Import Location
   - platform: homeassistant
     id: weather_location
-    entity_id: ${weather_entity}
+    entity_id: $weather_entity
     attribute: friendly_name
     internal: true
-
-#Weather condition now
+#Import weather condition now
   - platform: homeassistant
     id: weather_condition
-    entity_id: ${weather_entity}
+    entity_id: $weather_entity
     internal: true
-#5 Day forecast
+#Import 5 day forecast
   - platform: homeassistant
     id: forecast_5
-    entity_id: ${weather_entity}
+    entity_id: $weather_entity
     attribute: forecast
     internal: yes
+#Import Sun state
+  - platform: homeassistant
+    id: sun_state
+    entity_id: sun.sun
+    internal: true
 
 #Weather now images
 image:
@@ -488,7 +462,7 @@ font:
       - "\U000F05DF" # Camera off
       - "\U000F0241" # Flash
       - "\U000F0EF7" # Flash alert
-      - "\U000F06D0" # Eye
+      - "\U000F06D0" # Diocane
       - "\U000F0425" # OFF
       - "\U000F0415" # Plus
       - "\U000F0374" # Minus
@@ -528,14 +502,13 @@ font:
       - "\U000F059D" # weather-windy
       - "\U000F059E" # weather-windy-variant
 
-#This enable the lcd display and lamba
+#This enable the lcd display and relative lambda program
 #I addedd some map for helping translate some section like map condition and days of week
 display:
-  - platform: ili9341
+  - platform: ili9xxx
     model: TFT 2.4
     cs_pin: 5 
-    dc_pin: 4 
-    led_pin: 15 
+    dc_pin: 4  
     reset_pin: 22 
     rotation: 90
     id: tft_ha      
@@ -561,7 +534,7 @@ display:
          imgDict["exceptional"] = id(wpng_15);
          imgDict[""] = id(wpng_0);
          
-         //Map condition//
+         //Map conditions//
          std::map<std::string, const char *> conDict;
          conDict["clear-night"] = "Notte serena";
          conDict["cloudy"] = "Nuvoloso";
@@ -640,185 +613,187 @@ display:
          //Day of month as number
          auto dom = id(esptime).now().day_of_month;
          
-         //Height 1 day of week, day of month, month
+         //Position Y 1 day of week, day of month, month
          int h1 = 0;
-         //Height 2 time
+         //Position Y 2 time
          int h2 = 5;
-         //Height 3 weather icons, location, home name
+         //Position Y 3 weather icons, location, home name
          int h3 = 18;
-         //Height 4 temperature ext, int, 
+         //Position Y 4 temperature ext, int, 
          int h4 = 30;
-         //Heiht 6 humidity ext, int
+         //Position Y 6 humidity ext, int
          int h6 = 50;
-         //Height 7 wind, Pressure int
+         //Position Y 7 wind, Pressure int
          int h7 = 65;
-         //Height wy forecast
+         //Position Y wy forecast
          int wy = 85;
-         //Width wx forecast
+         //Position X wx forecast
          int wx = 32;
-         //Width 1 Weather location name, outside temp
+         //Position X 1 Weather location name, outside temp
          int w1 = 70;
-         //Width 2 Outside sensor icon
+         //Position Y 2 Outside sensor icon
          int w2 = 115;  
-         //Width 3 Home name, home temperature
+         //Position X 3 Home name, home temperature
          int w3 = 200;
-         //Width 4 Home sensor icon
+         //Position X 4 Home sensor icon
          int w4 = 250;
          
-         //Time
-         it.printf((it.get_width()/2), h1, id(font1), id(my_gray), TextAlign::TOP_CENTER, "%s %i %s", dayDict[day], dom, monDict[month]);
+         //Begin print to screen
+         // Time
+         it.printf((it.get_width() / 2), h1, id(font1), id(my_gray), TextAlign::TOP_CENTER, "%s %i %s", dayDict[day], dom, monDict[month]);
          it.strftime(it.get_width(), h2, id(font_clock), TextAlign::TOP_RIGHT, "%H:%M", id(esptime).now());
-         //Weather today
-         if (conDict.count(id(weather_condition).state) > 0)
-         {
-           //Icon of weather condition now
-           it.image(0, h3, imgDict[id(weather_condition).state]);
-           //Translated weather condition state as text
-           it.printf(0, h1, id(font_small), id(my_gray), "%s", conDict[id(weather_condition).state]);
+
+         // Weather now if it's night and sunny for display night icon
+         if (id(sun_state).state == "below_horizon" && id(weather_condition).state == "sunny") {
+            // Icon of weather condition night
+            it.image(0, h3, imgDict["clear-night"]);
+            // Translated weather condition state as text
+            it.printf(0, h1, id(font_small), id(my_gray), "%s", conDict["clear-night"]);
          } else {
-           //Icon of weather condition now
-           it.image(0, h3, imgDict["exceptional"]);
-           //Translated weather condition state as text
-           it.printf(0, h1, id(font_small), id(my_gray), "%s", conDict["exceptional"]);
+            // Check if weather_condition has a known state in the dictionary to prevent a crash
+            if (conDict.count(id(weather_condition).state) > 0) {
+               // Weather now for other cases
+               // Icon of weather condition now
+               it.image(0, h3, imgDict[id(weather_condition).state]);
+               // Translated weather condition state as text
+               it.printf(0, h1, id(font_small), id(my_gray), "%s", conDict[id(weather_condition).state]);
+            } else {
+               // This is printed in case weather_condition has another or unknown state
+               it.image(0, h3, imgDict["exceptional"]);
+               // Translated weather condition state as text
+               it.printf(0, h1, id(font_small), id(my_gray), "%s", conDict["exceptional"]);
+            }
          }
-         //Outside temp
-         if (id(weather_temperature).has_state())
-         {
-          it.printf(w1, h4, id(font2),  id(my_blue), "%.0f°", id(weather_temperature).state);
+
+         // Outside temp
+         if (id(weather_temperature).has_state()) {
+            it.printf(w1, h4, id(font2), id(my_blue), "%.0f°", id(weather_temperature).state);
          }
-         //Location
-         if (id(weather_location).has_state())
-         {
-          it.printf(w1, h3, id(font8), id(my_blue), "%s", id(weather_location).state.c_str());
+
+         // Location
+         if (id(weather_location).has_state()) {
+            it.printf(w1, h3, id(font8), id(my_blue), "%s", id(weather_location).state.c_str());
          }
-         //Inside temp
-         if (id(temp_int).has_state()) 
-         {
-           it.printf(w3, h3, id(font8), id(my_red), "Casa");
-           it.printf(w3, h4, id(font2),  id(my_red), "%.0f°", id(temp_int).state);
+
+         // Inside temp
+         if (id(temp_int).has_state()) {
+            it.printf(w3, h3, id(font8), id(my_red), "Casa");
+            it.printf(w3, h4, id(font2), id(my_red), "%.0f°", id(temp_int).state);
          }
-         //Today wind
-         if (id(vento).has_state())
-         {
-           it.printf(w2, h7, id(sensor_font), "\U000F059D");
-           it.printf(w2 +20, h7, id(font8),  id(my_gray), "%.0f km/h", id(vento).state);
+
+         // Today wind
+         if (id(vento).has_state()) {
+            it.printf(w2, h7, id(sensor_font), "\U000F059D");
+            it.printf(w2 + 20, h7, id(font8), id(my_gray), "%.0f km/h", id(vento).state);
          }
-         //External humidity
-         if (id(umidita_ext).has_state())
-         {
-           it.printf(w2, h6, id(sensor_font), "\U000F058E");
-           it.printf(w2 +20, h6, id(font8), id(my_gray), "%.0f%%", id(umidita_ext).state);
+
+         // External humidity
+         if (id(umidita_ext).has_state()) {
+            it.printf(w2, h6, id(sensor_font), "\U000F058E");
+            it.printf(w2 + 20, h6, id(font8), id(my_gray), "%.0f%%", id(umidita_ext).state);
          }
-         //Internal humidity
-         if (id(umidita_int).has_state())
-         {
-           it.printf(w4, h6, id(sensor_font), "\U000F058E");
-           it.printf(it.get_width(), h6, id(font8),  id(my_gray), TextAlign::TOP_RIGHT, "%.0f%%", id(umidita_int).state);
+
+         // Internal humidity
+         if (id(umidita_int).has_state()) {
+            it.printf(w4, h6, id(sensor_font), "\U000F058E");
+            it.printf(it.get_width(), h6, id(font8), id(my_gray), TextAlign::TOP_RIGHT, "%.0f%%", id(umidita_int).state);
          }
-         //Atmospheric pressure
-         if (id(pressione_int).has_state())
-         {
-           it.printf(w4, h7 , id(sensor_font), "\U000F04C5");
-           it.printf(it.get_width(), h7, id(font8),  id(my_gray), TextAlign::TOP_RIGHT, "%.0fb", id(pressione_int).state);
+
+         // Atmospheric pressure
+         if (id(pressione_int).has_state()) {
+            it.printf(w4, h7, id(sensor_font), "\U000F04C5");
+            it.printf(it.get_width(), h7, id(font8), id(my_gray), TextAlign::TOP_RIGHT, "%.0fb", id(pressione_int).state);
          }
-         //Imported forecast json deserialization
-         if (id(forecast_5).has_state())
-         {
-          int wxx = 0;
-          int wyy = 0;
-          int forday = 1;
-          DynamicJsonDocument doc(2048);
-          deserializeJson(doc, (id(forecast_5).state.c_str()));
-          JsonArray root = doc.as<JsonArray>();
-          for (int i=0; i <= 3; ++i)
-           {
-           JsonObject root_0 = root[i];
-           if (i == 0) {wxx = wx;}
-           if (i == 0) {wyy = wy;}
-           if (i == 0) {forday = (id(esptime).now().day_of_week +1);
-           }
-           if (forday == 8)
-           {
-             forday = 1;
-           }
-           //Day 3-4 go down 
-           //if (i == 2) {wyy += 38;}
-           //if (i == 2) {wxx = 0;}
-           std::string root_0_condition = root_0["condition"];
-           float root_0_precipitation = root_0["precipitation"];
-           float root_0_temperature = root_0["temperature"];
-           float root_0_templow = root_0["templow"];
-           //std::string root_0_datetime = root_0["datetime"];
-           //int root_0_wind_bearing = root_0["wind_bearing"];
-           //float root_0_wind_speed = root_0["wind_speed"];
-           
-           //Print to screen
-           //Translated day
-           it.printf(wxx, wyy, id(font_small), id(my_green), TextAlign::TOP_CENTER, "%s", dayDict_ext[forday]);
-           //Icon condition
-           if (fonDict.count(root_0_condition) > 0)
-           {
-           it.printf(wxx, wyy +12, id(weather_font), TextAlign::TOP_CENTER, "%s", fonDict[root_0_condition.c_str()]);
-           }
-           //Temp max
-           it.printf(wxx, wyy+60, id(font_small_1), TextAlign::TOP_CENTER, "max %.0f°", root_0_temperature);
-           //Temp min
-           it.printf(wxx, wyy+70, id(font_small_1), TextAlign::TOP_CENTER, "min %.0f°", root_0_templow);
-           //Rain in mm
-           it.printf(wxx, wyy+80, id(font_small_1), TextAlign::TOP_CENTER, "%.0f mm", root_0_precipitation);
-           //lines
-           it.line(0, wy, it.get_width(), wy);
-           it.line(0, wy+95, it.get_width(), wy+95);
-           wxx += 85;
-           forday += 1;
-          }          
+
+         // Imported forecast json deserialization
+         if (id(forecast_5).has_state()) {
+            int wxx = 0;
+            int wyy = 0;
+            int forday = 1;
+            DynamicJsonDocument doc(2048);
+            deserializeJson(doc, (id(forecast_5).state.c_str()));
+            JsonArray root = doc.as<JsonArray>();
+            for (int i = 0; i <= 3; ++i) {
+               JsonObject root_x = root[i];
+               if (i == 0) {
+                     wxx = wx;
+                     wyy = wy;
+                     forday = (id(esptime).now().day_of_week + 1);
+               }
+               if (forday == 8) {
+                     forday = 1;
+               }
+               // Day 3-4 go down
+               // if (i == 2) {wyy += 38;}
+               // if (i == 2) {wxx = 0;}
+               std::string root_0_condition = root_x["condition"];
+               float root_0_precipitation = root_x["precipitation"];
+               float root_0_temperature = root_x["temperature"];
+               float root_0_templow = root_x["templow"];
+
+               // Print to screen
+               // Translated day
+               it.printf(wxx, wyy, id(font_small), id(my_green), TextAlign::TOP_CENTER, "%s", dayDict_ext[forday]);
+               // Icon condition
+               if (fonDict.count(root_0_condition) > 0) {
+                     it.printf(wxx, wyy + 12, id(weather_font), TextAlign::TOP_CENTER, "%s", fonDict[root_0_condition.c_str()]);
+               }
+               // Temp max
+               it.printf(wxx, wyy + 60, id(font_small_1), TextAlign::TOP_CENTER, "max %.0f°", root_0_temperature);
+               // Temp min
+               it.printf(wxx, wyy + 70, id(font_small_1), TextAlign::TOP_CENTER, "min %.0f°", root_0_templow);
+               // Rain in mm
+               it.printf(wxx, wyy + 80, id(font_small_1), TextAlign::TOP_CENTER, "%.0f mm", root_0_precipitation);
+               // lines
+               it.line(0, wy, it.get_width(), wy);
+               it.line(0, wy + 95, it.get_width(), wy + 95);
+               wxx += 85;
+               forday += 1;
+            }
          }
-         //Heater icon
-         if ((id(termostato1).mode) == 0)
-         {
-           it.printf((it.get_width()/2), (it.get_height()-15), id(home_font), id(my_gray), TextAlign::BASELINE_CENTER, "\U000F0425");
+         // Heater icon
+         if ((id(termostato1).mode) == 0) {
+            it.printf((it.get_width() / 2), (it.get_height() - 15), id(home_font), id(my_gray), TextAlign::BASELINE_CENTER, "\U000F0425");
          } else {
-           if (id(sensor_caldaia).state) 
-           {
-             it.printf((it.get_width()/2), (it.get_height()-15), id(home_font), id(my_red), TextAlign::BASELINE_CENTER, "\U000F0238");
-           } else {
-             it.printf((it.get_width()/2), (it.get_height()-15), id(home_font), id(my_gray), TextAlign::BASELINE_CENTER, "\U000F0238");
-           }
+            if (id(sensor_caldaia).state) {
+               it.printf((it.get_width() / 2), (it.get_height() - 15), id(home_font), id(my_red), TextAlign::BASELINE_CENTER, "\U000F0238");
+            } else {
+               it.printf((it.get_width() / 2), (it.get_height() - 15), id(home_font), id(my_gray), TextAlign::BASELINE_CENTER, "\U000F0238");
+            }
          }
-         //Display thermostat desired temperature
-         it.printf((it.get_width()/2), it.get_height(), id(font8),  id(my_red), TextAlign::BASELINE_CENTER, "%.0f°", id(termostato1).target_temperature);
-         //When the motion sensor see something draw 2 eyes
-         if (id(movimento).state) 
-         {
-           it.printf(it.get_width(), it.get_height(), id(home_font), id(my_red), TextAlign::BASELINE_RIGHT, "\U000F06D0");
-           it.printf(0, it.get_height(), id(home_font), id(my_red), TextAlign::BASELINE_LEFT, "\U000F06D0");
+
+         // Display thermostat desired temperature
+         it.printf((it.get_width() / 2), it.get_height(), id(font8), id(my_red), TextAlign::BASELINE_CENTER, "%.1f°", id(termostato1).target_temperature);
+
+         // When the motion sensor sees something, draw 2 eyes
+         if (id(movimento).state) {
+            it.printf(it.get_width(), it.get_height(), id(home_font), id(my_red), TextAlign::BASELINE_RIGHT, "\U000F06D0");
+            it.printf(0, it.get_height(), id(home_font), id(my_red), TextAlign::BASELINE_LEFT, "\U000F06D0");
          } else {
-           //Plus Key
-           it.printf(it.get_width(), it.get_height(), id(home_font), id(my_gray), TextAlign::BASELINE_RIGHT, "\U000F0415");
-           //Minus key
-           it.printf(0, it.get_height(), id(home_font), id(my_gray), TextAlign::BASELINE_LEFT, "\U000F0374");
+            // Plus Key
+            it.printf(it.get_width(), it.get_height(), id(home_font), id(my_gray), TextAlign::BASELINE_RIGHT, "\U000F0415");
+            // Minus key
+            it.printf(0, it.get_height(), id(home_font), id(my_gray), TextAlign::BASELINE_LEFT, "\U000F0374");
          }
-         //Total absorption icon and value
-         if (id(consumo_t).has_state())
-         {
-           if (id(consumo_t).state < 2800)
-           {
-             it.printf((it.get_width()/2 -65), (it.get_height()-15), id(home_font), id(my_gray), TextAlign::BASELINE_CENTER, "\U000F0241");
-             it.printf((it.get_width()/2 -65), it.get_height(), id(font8),  id(my_blue), TextAlign::BASELINE_CENTER, "%.0f W", id(consumo_t).state);
-           } else {
-             it.printf((it.get_width()/2 -65), (it.get_height()-15), id(home_font), id(my_red), TextAlign::BASELINE_CENTER, "\U000F0241");
-             it.printf((it.get_width()/2 -65), it.get_height(), id(font8),  id(my_red), TextAlign::BASELINE_CENTER, "%.0f W", id(consumo_t).state);
-           }
+
+         // Total absorption icon and value
+         if (id(consumo_t).has_state()) {
+            if (id(consumo_t).state < 2800) {
+               it.printf((it.get_width() / 2 - 65), (it.get_height() - 15), id(home_font), id(my_gray), TextAlign::BASELINE_CENTER, "\U000F0241");
+               it.printf((it.get_width() / 2 - 65), it.get_height(), id(font8), id(my_blue), TextAlign::BASELINE_CENTER, "%.0f W", id(consumo_t).state);
+            } else {
+               it.printf((it.get_width() / 2 - 65), (it.get_height() - 15), id(home_font), id(my_red), TextAlign::BASELINE_CENTER, "\U000F0241");
+               it.printf((it.get_width() / 2 - 65), it.get_height(), id(font8), id(my_red), TextAlign::BASELINE_CENTER, "%.0f W", id(consumo_t).state);
+            }
          }
-         //Washing machine status and absorption value
-         if (id(consumo_c).has_state())
-         {
-           if (id(stato_e).state)
-           {
-             it.printf((it.get_width()/2 +65), (it.get_height()-15), id(home_font), id(my_red), TextAlign::BASELINE_CENTER, "\U000F072A");
-             it.printf((it.get_width()/2 +65), it.get_height(), id(font8),  id(my_red), TextAlign::BASELINE_CENTER, "%.0f W", id(consumo_c).state);
-           } else {
-             it.printf((it.get_width()/2 +65), (it.get_height()-15), id(home_font), id(my_gray), TextAlign::BASELINE_CENTER, "\U000F11BD");
-             it.printf((it.get_width()/2 +65), it.get_height(), id(font8),  id(my_blue), TextAlign::BASELINE_CENTER, "%.0f W", id(consumo_c).state);
-           }
+
+         // Washing machine status and absorption value
+         if (id(consumo_c).has_state()) {
+            if (id(consumo_c).state > 20) {
+               it.printf((it.get_width() / 2 + 65), (it.get_height() - 15), id(home_font), id(my_red), TextAlign::BASELINE_CENTER, "\U000F072A");
+               it.printf((it.get_width() / 2 + 65), it.get_height(), id(font8), id(my_red), TextAlign::BASELINE_CENTER, "%.0f W", id(consumo_c).state);
+            } else {
+               it.printf((it.get_width() / 2 + 65), (it.get_height() - 15), id(home_font), id(my_gray), TextAlign::BASELINE_CENTER, "\U000F11BD");
+               it.printf((it.get_width() / 2 + 65), it.get_height(), id(font8), id(my_blue), TextAlign::BASELINE_CENTER, "%.0f W", id(consumo_c).state);
+            }
          }
