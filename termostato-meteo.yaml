@@ -1,40 +1,63 @@
-esphome:
-  name: termostato-meteo
-  platform: ESP32
-  board: esp32dev
-  on_boot:
-
-#If you want to start thermostat in heat mode when it loose power uncomment the bottom lines
-#    - climate.control:
-#        id: termostato1
-#        mode: HEAT
-
-#This start the backlight subsystem
-    - script.execute: backlight_timer
-
-#Substitutions
+#Substitutions do un nome fisso a delle entita
 substitutions:
+#Set here your entities
+  devicename: "display-28"
+  ssid: Esp32-2432S028 Fallback Hotspot
+  static_ip: 192.168.0.119
+  gateway: 192.168.0.1
+  subnet: 255.255.255.0
 #Set here your entities
 # Heater entity from home assistant, in my case i used a Shelly 1v3 for open/close contact of my house gas heater.
 #You can also use a relay connected to a gpio but I do not recommend it especially if the load is alternating current the absorption peaks could glue the contacts of the cheap relays.
 #I also noticed that the electromagnetic peak sometimes crashes the esp32. Since we are talking about a delicated system like a gas heater, it is better to opt for a certified device.
-  heater: switch.shelly_caldaia
+  heater: climate.cronotermostato
 # Weather entity from home assistant
   weather_entity: weather.casa
 # Total consumption sensor to import from home assistant i have a Shelly em with 2 amperomeric sensor, this is the first and grab the phase exiting from my energy grid
-  tc: sensor.consumo_totale_power
+  tc: sensor.potenza_energia_elettrica_power
 # Partial consumtion entity like washing machine etc to import from home assistant this is my second amperometric sensor and grab the phase of my garage
-  pc: sensor.consumo_cantina_power
+  pc: sensor.consumo_lavastoviglie_power
 #Weather now icon size
   icon_xy: '65x65'
+#temperatura purificatore config
+  temperatura_purificatore : sensor.zhimi_airpurifier_mb3_temperature
+
+globals:
+  - id: menu_pos
+    restore_value: no
+    type: int
+    initial_value: "0"
+#definisco coordinate icona pagina succesiva
+  - id: x_page
+    type: int
+    restore_value: no
+    initial_value: '300'
+  - id: y_page
+    type: int
+    restore_value: no
+    initial_value: '220'
+
+
+
+
+# display 320x240
+
+esphome:
+  name: $devicename
+  friendly_name: Display 2.8
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
 
 # Enable logging
 logger:
-  logs:
-    component: ERROR
 
 # Enable Home Assistant API
 api:
+  encryption:
+    key: "qFyyPu4U4WWJw9iV9+WlCO/aYmtA+DrovMJqmH2PHpg="
   services:
   # Receive sound from homeassistant as service (only buzzer rtttl)
     - service: play_rtttl
@@ -47,264 +70,43 @@ api:
 #Buzzer
 rtttl:
   output: rtttl_out
-
-#This enable firmware upload via ota
 ota:
+  password: "b3c2948c5c1aa9c51f9e7b8e6ff9556a"
 
-#This is the wifi block connection, change your wifi credential in secrets.yaml before tryng a firmware upload
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
-  ap:
-    ssid: "Meteo-thermo"
-    password: !secret fallpass 
 
-#This enable the captive portal, if the esp32 cannot connect to existing wifi network
-#it create ad access point whin the "Meteo-thermo" ssid, you can connect it and tell to esp on wich wifi network it can connect by inserting the ssid and wpa password
-#Default esphome captive portal address is 192.168.4.1
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: $ssid
+    password: "TuMHWpSUedAq"
+
 captive_portal:
+ #page successiva riferimenti definita come variabile globale
+
+
+spi:
+  - id: lcd
+    clk_pin: GPIO14
+    mosi_pin: GPIO13
+    miso_pin: GPIO12
+  - id: touch
+    clk_pin: GPIO25
+    mosi_pin: GPIO32
+    miso_pin: GPIO39
+
+i2c:
+  sda: GPIO27
+  scl: GPIO22
+  scan: true
+  id: bus_a
+
 
 #This import arduinojson library for extract weather forecasts
 json:
 
-#This enable spi bus for diplay
-spi:
- clk_pin: 18
- mosi_pin: 23
- miso_pin: 19
-
-#This enable i2c bus for bme280 sensor
-i2c:
-  - id: bus_a
-    sda: 32
-    scl: 25
-
-#This create the climate entity
-climate:
-  - platform: thermostat
-    visual:
-      min_temperature: 16 °C
-      max_temperature: 30 °C
-    name: Termostato
-    id: termostato1
-    sensor: temp_int
-    min_heating_off_time: 30s
-    min_heating_run_time: 30s
-    min_idle_time: 30s
-    #This is the service to call on off of the Shelly 1v3 actuator.
-    heat_action:
-      homeassistant.service:
-        service: switch.turn_on
-        data: {entity_id: $heater}
-    idle_action:
-      homeassistant.service:
-        service: switch.turn_off
-        data: {entity_id: $heater}
-
-#This enable the touch screen
-touchscreen:
-  platform: xpt2046
-  id: xpt2046_touch
-  cs_pin: 14 
-  interrupt_pin: 27 
-  update_interval: 50ms
-  report_interval: 1s
-  calibration_x_min: 3575
-  calibration_x_max: 368
-  calibration_y_min: 3800
-  calibration_y_max: 441
-  #When the screen is touched turn on the backlight
-  on_touch:
-    - script.stop: backlight_timer
-    - script.execute: backlight_timer
-  #Uncomment for calibrations
-  #  - lambda: |-
-  #        ESP_LOGI("cal", "x=%d, y=%d, x_raw=%d, y_raw=%0d",
-  #            id(xpt2046_touch).x,
-  #            id(xpt2046_touch).y,
-  #            id(xpt2046_touch).x_raw,
-  #            id(xpt2046_touch).y_raw
-  #            );
-
-output:
-  #Backlight pwm section
-  - platform: ledc
-    pin: 15
-    id: backlight_pwm
-    inverted: true
-  #Buzzer
-  - platform: ledc
-    pin: GPIO21
-    id: rtttl_out
-
-# Define a monochromatic, dimmable light for the backlight
-light:
-  - platform: monochromatic
-    output: backlight_pwm
-    name: "Luce termostato"
-    id: back_light
-    restore_mode: ALWAYS_ON
-    internal: true
-
-#This is the script for turn off the backlight after some seconds of inactivity
-script:
-  id: backlight_timer
-  then:
-  - light.turn_on:
-      id: back_light
-      brightness: 100%
-  - delay: 20s
-  - light.turn_on:
-      id: back_light
-      brightness: 50%
-  - delay: 40s
-  - light.turn_off: back_light
-
-#Import current time from Home Assistant
-time:
-  - platform: homeassistant
-    id: esptime
-
-#In my device i add a motion sensor for turn on the backlight automatically when i try to read monitor
-binary_sensor:
-  - platform: gpio
-    pin: 
-      number: 26
-      mode: INPUT_PULLUP
-    device_class: motion    
-    id: movimento
-    name: Movimento
-    on_press:
-      - script.stop: backlight_timer
-      - script.execute: backlight_timer
-#This import heater entity from home assistant (it is a shelly 1v3 that open or close the heater contact)
-  - platform: homeassistant
-    name: "Caldaia"
-    entity_id: $heater
-    id: sensor_caldaia
-    internal: true
-#Virtual touch buttons on display
-#Touch key plus
-  - platform: touchscreen
-    id: touch_key_plus
-    x_min: 250
-    x_max: 320
-    y_min: 0
-    y_max: 60
-    on_press:
-      - climate.control:
-          id: termostato1
-          target_temperature: !lambda return (id(termostato1).target_temperature + 0.5);
-      - rtttl.play: 'one short:d=4,o=5,b=100:16e6'
-#Touch key minus
-  - platform: touchscreen
-    id: touch_key_minus
-    x_min: 0
-    x_max: 60
-    y_min: 0
-    y_max: 60
-    on_press:
-      - climate.control:
-          id: termostato1
-          target_temperature: !lambda return (id(termostato1).target_temperature - 0.5);
-      - rtttl.play: 'one short:d=4,o=5,b=100:16e6'
-#Touch key climate on/off
-  - platform: touchscreen
-    id: touch_key_climate
-    x_min: 110
-    x_max: 220
-    y_min: 0
-    y_max: 60
-    on_click:
-    #Thermostat on
-    - min_length: 50ms
-      max_length: 500ms
-      then:
-        - climate.control:
-            id: termostato1
-            mode: "HEAT"
-        - rtttl.play: 'one short:d=4,o=5,b=100:16e6'
-    #Thermostat off
-    - min_length: 1000ms
-      max_length: 5000ms
-      then:
-        - climate.control:
-            id: termostato1
-            mode: "OFF"
-        - rtttl.play: 'one short:d=4,o=5,b=100:16e6'
-
-#Int sensor section import and declarations
-sensor:
-#Import external temperature
-  - platform: homeassistant
-    id: weather_temperature
-    entity_id: $weather_entity
-    attribute: temperature
-    internal: true
-#Import Wind
-  - platform: homeassistant
-    id: vento
-    entity_id: $weather_entity
-    attribute: wind_speed
-    internal: true
-#Import external Humidity
-  - platform: homeassistant
-    id: umidita_ext
-    entity_id: $weather_entity
-    attribute: humidity
-    internal: true
-#Bme280 internal sensor
-  - platform: bme280
-    address: 0x76
-    temperature:
-      name: "Temperatura"
-      id: temp_int
-      oversampling: 16x
-    pressure:
-      name: "Pressione"
-      id: pressione_int
-    humidity:
-      name: "Umidita"
-      id: umidita_int
-    update_interval: 20s
-#Shelly em sensor for my home total absorpion
-#Total energy in kw/h
-  - platform: homeassistant
-    id: consumo_t
-    entity_id: $tc
-    internal: true
-#Shelly em washing machine absorpion
-#Garage energy in kw/h
-  - platform: homeassistant
-    id: consumo_c
-    entity_id: $pc
-    internal: true
-
-#String sensor import
-text_sensor:
-#Import Location
-  - platform: homeassistant
-    id: weather_location
-    entity_id: $weather_entity
-    attribute: friendly_name
-    internal: true
-#Import weather condition now
-  - platform: homeassistant
-    id: weather_condition
-    entity_id: $weather_entity
-    internal: true
-#Import 5 day forecast
-  - platform: homeassistant
-    id: forecast_5
-    entity_id: $weather_entity
-    attribute: forecast
-    internal: yes
-#Import Sun state
-  - platform: homeassistant
-    id: sun_state
-    entity_id: sun.sun
-    internal: true
-
+#Definisco imagini
 #Weather now images
 image:
 #0-default.png
@@ -387,56 +189,69 @@ image:
     id: wpng_15
     type: RGB24
     resize: ${icon_xy}
+#16-radio e power
+  - file: "images/power-off-button.png"
+    id: on_off_button
+  - file: "images/radio-station.png"
+    id: radio
 
-#Color section for display rendering
-color:
-  - id: my_red
-    red: 100%
-    green: 0%
-    blue: 0%
-  - id: my_yellow
-    red: 100%
-    green: 100%
-    blue: 0%
-  - id: my_green
-    red: 0%
-    green: 100%
-    blue: 0%
-  - id: my_blue
-    red: 0%
-    green: 0%
-    blue: 100%
-  - id: my_gray
-    red: 50%
-    green: 50%
-    blue: 50%
+### CUSTOM!!
+# menu spunto https://github.com/anton-semeniak/Esphome-TTGO-T-Display-Remote/blob/master/ttgo_menu.yaml
+
+
+font:
+  - file: "fonts/Helvetica.ttf"
+    id: helvetica_48
+    size: 48
+  - file: "fonts/Helvetica.ttf"
+    id: helvetica_36
+    size: 36
+  - file: "fonts/Helvetica.ttf"
+    id: helvetica_24
+    size: 24
+  - file: "fonts/Helvetica.ttf"
+    id: helvetica_12
+    size: 12
+  - file: "fonts/arial.ttf"
+    id: font11
+    size: 12
+  - file: "fonts/materialdesignicons-webfont.ttf"
+    id: icon_font_20
+    size: 20
+    glyphs: [
+      "", # mdi-thermometer
+      "", # mdi-water-percent
+      "ﴟ", # mdi-air-filter
+      "󰌶", # mdi-lightbulb-outline
+      "󰛨", # mdi-lightbulb-on
+       ] 
+
 
 #Font declaration
-font:
 #font date
-  - file: 'fonts/Arial-Black.ttf'
+  - file: 'fonts/arial-black.ttf'
     id: font1
-    size: 18
-#Time
+    size: 16
+#Time orologio dx
   - file: 'fonts/BebasNeue-Regular.ttf'
     id: font_clock
-    size: 40
-#Temperature
+    size: 30
+#Temperature blu  outside
   - file: 'fonts/BebasNeue-Regular.ttf'
     id: font2
-    size: 45
+    size: 35
 #Location sensors
   - file: 'fonts/arial.ttf'
     id: font8
     size: 18
 # Day name in forecast
-  - file: 'fonts/Arial-Black.ttf'
+  - file: 'fonts/arial-black.ttf'
     id: font_small
     size: 12
 #Forecast fonts
   - file: 'fonts/arial.ttf'
     id: font_small_1
-    size: 12
+    size: 10
 #Font icon various sensor
   - file: 'fonts/materialdesignicons-webfont.ttf'
     id: sensor_font
@@ -448,6 +263,8 @@ font:
       - "\U000F058E" # Humidity
       - "\U000F0238" # Fire
       - "\U000F0F55" # Home thermometer
+      - "\U000F0BB1" # next page               
+
 #Big icons other home stuff
   - file: 'fonts/materialdesignicons-webfont.ttf'
     id: home_font
@@ -466,6 +283,9 @@ font:
       - "\U000F0425" # OFF
       - "\U000F0415" # Plus
       - "\U000F0374" # Minus
+      - "\U000F0335" # lightbulb pieno
+      - "\U000F0336" # lightbulb vuoto
+
 #Forecast icons
   - file: 'fonts/materialdesignicons-webfont.ttf'
     id: weather_font
@@ -502,19 +322,340 @@ font:
       - "\U000F059D" # weather-windy
       - "\U000F059E" # weather-windy-variant
 
-#This enable the lcd display and relative lambda program
-#I addedd some map for helping translate some section like map condition and days of week
+
+
+color:
+  - id: my_red
+    red: 100%
+    green: 0%
+    blue: 0%
+  - id: my_yellow
+    red: 100%
+    green: 100%
+    blue: 0%
+  - id: my_green
+    red: 0%
+    green: 100%
+    blue: 0%
+  - id: my_blue
+    red: 0%
+    green: 0%
+    blue: 100%
+  - id: my_gray
+    red: 50%
+    green: 50%
+    blue: 50%
+  - id: my_orange
+    red: 100%
+    green: 50%
+    blue: 0%
+  - id: my_teal
+    red: 0%
+    green: 100%
+    blue: 100%
+  - id: my_white
+    red: 100%
+    green: 100%
+    blue: 100%
+
+
+
+#This create the climate entity
+climate:
+  - platform: thermostat
+    visual:
+      min_temperature: 16 °C
+      max_temperature: 30 °C
+    name: Termostato
+    id: termostato1
+    sensor: temp_int
+    min_heating_off_time: 30s
+    min_heating_run_time: 30s
+    min_idle_time: 30s
+    #This is the service to call on off of the Shelly 1v3 actuator.
+    heat_action:
+      homeassistant.service:
+        service: switch.turn_on
+        data: {entity_id: $heater}
+    idle_action:
+      homeassistant.service:
+        service: switch.turn_off
+        data: {entity_id: $heater}
+
+
+
+# Pulsanti touchSCREEN
+
+binary_sensor:
+  - platform: status
+    name: "Node Status"
+    id: system_status
+
+#Virtual touch buttons on display 320x240
+#Touch key plus pagina avanti
+  - platform: touchscreen
+    id: touch_key_plus
+    x_min: 260
+    x_max: 320
+    y_min: 180
+    y_max: 240
+    on_press:
+      - display.page.show_next: schermo  
+#Touch key meno
+  - platform: touchscreen
+    id: touch_key_minus
+    x_min: 260
+    x_max: 320
+    y_min: 0
+    y_max: 60
+    on_press:
+      - display.page.show_previous: schermo  
+#Touch key climate on/off
+  - platform: touchscreen
+    id: touch_key_climate
+    x_min: 260
+    x_max: 320
+    y_min: 100
+    y_max: 160
+    # page_id: page1
+    on_click:
+    #Thermostat on
+    - min_length: 50ms
+      max_length: 500ms
+      then:
+        - climate.control:
+            id: termostato1
+            mode: "HEAT"
+        - rtttl.play: 'one short:d=4,o=5,b=100:16e6'
+    #Thermostat off
+    - min_length: 1000ms
+      max_length: 5000ms
+      then:
+        - climate.control:
+            id: termostato1
+            mode: "OFF"
+        - rtttl.play: 'one short:d=4,o=5,b=100:16e6'
+
+#Touch key aumenta temperatura
+  - platform: touchscreen
+    id: touch_key_aumenta_temp
+    x_min: 160
+    x_max: 240
+    y_min: 180
+    y_max: 240
+    page_id: page3
+    on_press:
+      - climate.control:
+          id: termostato1
+          target_temperature: !lambda return (id(termostato1).target_temperature + 0.5);
+      - rtttl.play: 'one short:d=4,o=5,b=100:16e6'
+#Touch key mdiminuisci temperatira
+  - platform: touchscreen
+    id: touch_key_diminuisce_temp
+    x_min: 160
+    x_max: 240
+    y_min: 0
+    y_max: 60
+    page_id: page3
+    on_press:
+      - climate.control:
+          id: termostato1
+          target_temperature: !lambda return (id(termostato1).target_temperature - 0.5);
+      - rtttl.play: 'one short:d=4,o=5,b=100:16e6'      
+
+
+
+
+
+
+
+
+time:
+  - platform: homeassistant
+    id: esptime
+
+
+
+sensor:
+  - platform: uptime
+    # name: Uptime Sensor
+    internal: True
+    id: uptime_sensor
+    update_interval: 1s
+    on_raw_value:
+      then:
+        - text_sensor.template.publish:
+            id: uptime_human
+            state: !lambda |-
+              int seconds = round(id(uptime_sensor).raw_state);
+              int days = seconds / (24 * 3600);
+              seconds = seconds % (24 * 3600);
+              int hours = seconds / 3600;
+              seconds = seconds % 3600;
+              int minutes = seconds /  60;
+              seconds = seconds % 60;
+              return (
+                ("Uptime ") +
+                (days ? to_string(days) + "d " : "") +
+                (hours ? to_string(hours) + "h " : "") +
+                (minutes ? to_string(minutes) + "m " : "") +
+                (to_string(seconds) + "s")
+              ).c_str();
+
+  - platform: wifi_signal
+    # name: "WiFi Signal Sensor"
+    internal: True
+    id: wifi_signal_sensor
+    update_interval: 5s
+
+#Import external temperature
+  - platform: homeassistant
+    id: weather_temperature
+    entity_id: $weather_entity
+    attribute: temperature
+    internal: true
+#Import Wind speed
+  - platform: homeassistant
+    id: vento
+    entity_id: $weather_entity
+    attribute: wind_speed
+    internal: true
+#Import Wind dir
+  - platform: homeassistant
+    id: wind_bearing
+    entity_id: $weather_entity
+    attribute: wind_bearing
+    internal: true
+#Import external Humidity
+  - platform: homeassistant
+    id: umidita_ext
+    entity_id: $weather_entity
+    attribute: humidity
+    internal: true
+#Import external pressure
+  - platform: homeassistant
+    id: pressure_ext
+    entity_id: $weather_entity
+    attribute: pressure
+    internal: true
+
+#Total energy in kw/h
+  - platform: homeassistant
+    id: consumo_t
+    entity_id: $tc
+    internal: true
+#Lavastoviglie energy in kw/h
+  - platform: homeassistant
+    id: consumo_c
+    entity_id: $pc
+    internal: true
+
+
+
+#Bme280 internal sensor su co2 BOX prendo tramite hA
+  - platform: homeassistant
+    id: temp_int
+    entity_id: sensor.co2box_bmp280_temperature
+    internal: true
+  - platform: homeassistant
+    id: pressione_int
+    entity_id: sensor.co2box_bmp280_pressure
+    internal: true
+  - platform: homeassistant
+    id: co2_int
+    entity_id: sensor.co2box_mhz19b_carbondioxide
+    internal: true
+#temperatura umidita purificatore    
+  - platform: homeassistant
+    id: temperatura_pur
+    entity_id: $temperatura_purificatore 
+    internal: true
+  - platform: homeassistant
+    id: umidita_int
+    entity_id: sensor.zhimi_airpurifier_mb3_humidity
+    internal: true
+#This import heater entity from home assistant (it is a shelly 1v3 that open or close the heater contact)
+  - platform: homeassistant
+    name: "Caldaia"
+    entity_id: $heater
+    id: sensor_caldaia
+    internal: true
+
+
+text_sensor:
+  - platform: template
+    # name: Uptime Human Readable
+    id: uptime_human
+    icon: mdi:clock-start
+    internal: True
+
+  - platform: wifi_info
+    ip_address:
+      # name: ESP IP Address
+      id: ip_address
+  # Sensore luci
+  - platform: homeassistant
+    id: luci
+    entity_id: group.all_light
+    name: "Luci Casa"
+#Import Location
+  - platform: homeassistant
+    id: weather_location
+    entity_id: $weather_entity
+    attribute: friendly_name
+    internal: true
+#Import weather condition now
+  - platform: homeassistant
+    id: weather_condition
+    entity_id: $weather_entity
+    internal: true
+#Import 5 day forecast
+  - platform: homeassistant
+    id: forecast_5
+    entity_id: $weather_entity
+    attribute: forecast
+    internal: yes
+#Import Sun state
+  - platform: homeassistant
+    id: sun_state
+    entity_id: sun.sun
+    internal: true
+
+#imposto grafico pagina 4
+graph:
+  # Show multi-trace graph
+  - id: multi_temperature_graph
+    duration: 1h
+    x_grid: 10min
+    y_grid: 1.0     # degC/div
+    width: 200
+    height: 80
+    max_value: 40
+
+    traces:
+      - sensor: temperatura_pur
+        line_type: DASHED
+        line_thickness: 2
+        color: my_red
+      - sensor: weather_temperature
+        line_type: SOLID
+        line_thickness: 3
+        color: my_blue
+
 display:
   - platform: ili9xxx
-    model: TFT 2.4
-    cs_pin: 5 
-    dc_pin: 4  
-    reset_pin: 22 
+    model: ILI9341
+    spi_id: lcd
+    cs_pin: 15
+    dc_pin: 2
     rotation: 90
-    id: tft_ha      
+    id: schermo
     pages:
-      - id: page1
-        lambda: |-
+
+
+# https://github.com/niahane/meteo-thermostat
+    - id: page1    # pagina 1
+      lambda: |-
          //Map icons//
          std::map<std::string, image::Image *> imgDict;
          imgDict["clear-night"] = id(wpng_1);
@@ -754,7 +895,7 @@ display:
          // Heater icon
          if ((id(termostato1).mode) == 0) {
             it.printf((it.get_width() / 2), (it.get_height() - 15), id(home_font), id(my_gray), TextAlign::BASELINE_CENTER, "\U000F0425");
-         } else {
+          } else {
             if (id(sensor_caldaia).state) {
                it.printf((it.get_width() / 2), (it.get_height() - 15), id(home_font), id(my_red), TextAlign::BASELINE_CENTER, "\U000F0238");
             } else {
@@ -763,18 +904,18 @@ display:
          }
 
          // Display thermostat desired temperature
-         it.printf((it.get_width() / 2), it.get_height(), id(font8), id(my_red), TextAlign::BASELINE_CENTER, "%.1f°", id(termostato1).target_temperature);
+          it.printf((it.get_width() / 2), it.get_height(), id(font8), id(my_red), TextAlign::BASELINE_CENTER, "%.1f°", id(termostato1).target_temperature);
 
          // When the motion sensor sees something, draw 2 eyes
-         if (id(movimento).state) {
-            it.printf(it.get_width(), it.get_height(), id(home_font), id(my_red), TextAlign::BASELINE_RIGHT, "\U000F06D0");
-            it.printf(0, it.get_height(), id(home_font), id(my_red), TextAlign::BASELINE_LEFT, "\U000F06D0");
-         } else {
+         // if (id(movimento).state) {
+         //   it.printf(it.get_width(), it.get_height(), id(home_font), id(my_red), TextAlign::BASELINE_RIGHT, "\U000F06D0");
+         //   it.printf(0, it.get_height(), id(home_font), id(my_red), TextAlign::BASELINE_LEFT, "\U000F06D0");
+         // } else {
             // Plus Key
             it.printf(it.get_width(), it.get_height(), id(home_font), id(my_gray), TextAlign::BASELINE_RIGHT, "\U000F0415");
             // Minus key
             it.printf(0, it.get_height(), id(home_font), id(my_gray), TextAlign::BASELINE_LEFT, "\U000F0374");
-         }
+         // }
 
          // Total absorption icon and value
          if (id(consumo_t).has_state()) {
@@ -797,3 +938,349 @@ display:
                it.printf((it.get_width() / 2 + 65), it.get_height(), id(font8), id(my_blue), TextAlign::BASELINE_CENTER, "%.0f W", id(consumo_c).state);
             }
          }
+
+
+
+    - id: page2   # pagina 2
+      lambda: |-
+
+          // cordinate scritta direzione  vento
+          int DIRx = 110;
+          int DIRy = 50;
+          // cordinate centro rosa venti
+          int cerchio_x = 120;
+          int cerchio_y = 70;
+          int raggio = 50;
+
+
+          // Convert wind direction da int a float con nome DIR per fare IF
+          float dir = id(wind_bearing).state;
+
+          // Wind DIREZIONE NANE (do il nome)
+          
+            std::string  name_dir;  // definisco variabile locale stringa di nome name_dir dove assegno la direzione del vento in NSEW
+            std::string  name_vento;  // definisco variabile locale stringa di nome vento
+
+            if (dir>0 && dir<=11) { name_dir = "N"; name_vento = "Tramontana"; }
+             else {
+            if (dir>11 && dir<=33) { name_dir = "NEE"; name_vento = "Tramontana"; } 
+             else {
+            if (dir>33 && dir<=55) { name_dir = "NE"; name_vento = "Greco"; } 
+             else {
+            if (dir>55 && dir<=77) { name_dir = "ENE"; name_vento = "Greco"; } 
+             else {
+            if (dir>77 && dir<=99) { name_dir = "E"; name_vento = "Levante"; } 
+             else {
+            if (dir>99 && dir<=121) { name_dir = "ESE"; name_vento = "Levante"; } 
+             else {
+            if (dir>121 && dir<=143) { name_dir = "SE"; name_vento = "Scirocco"; } 
+             else { 
+            if (dir>143 && dir<=165) { name_dir = "SSE"; name_vento = "Scirocco"; } 
+             else { 
+            if (dir>165 && dir<=190) { name_dir = "S"; name_vento = "Mezzogiorno"; } 
+             else {   
+            if (dir>190 && dir<=212) { name_dir = "SSW"; name_vento = "Mezzogiorno"; } 
+             else {   
+            if (dir>212 && dir<=234) { name_dir = "SW"; name_vento = "Libeccio"; } 
+             else {   
+            if (dir>234 && dir<=256) { name_dir = "WSW"; name_vento = "Libeccio"; } 
+             else {   
+            if (dir>256 && dir<=278) { name_dir = "W"; name_vento = "Ponente"; } 
+             else {   
+            if (dir>278 && dir<=300) { name_dir = "WNW"; name_vento = "Ponente"; } 
+             else {   
+            if (dir>300 && dir<=322) { name_dir = "NW"; name_vento = "Maestrale"; } 
+             else {   
+            if (dir>322 && dir<=344) { name_dir = "NNW"; name_vento = "Maestrale"; } 
+             else {   
+            if (dir>344 && dir<=360) { name_dir = "N"; name_vento = "Tramontana"; } 
+             else {                   
+           } } } } } } } } } } } } } } } } }
+
+
+ 
+          // Colours - used for visiual indication of wind strength
+          auto red = Color(255, 0, 0);
+          auto green = Color(0, 255, 0);
+          auto light_blue = Color(135, 237, 232);
+          auto orange = Color(255, 170, 43);
+          auto white = Color(255, 255, 255);
+          auto purple = Color(97, 15, 219);
+          auto grey = Color(100, 135, 135);
+
+          // history arrays for trend display
+          static float hist_wind[30];
+          static int hist_dir[30];
+          static int index=0;
+          static int prev_index=29;
+
+
+
+
+          // Store in array
+          if ((hist_wind[prev_index]!=id(vento).state || hist_dir[prev_index]!=dir) && id(vento).state!=0) {
+            hist_wind[index] = id(vento).state;
+            hist_dir[index] = dir;
+            index += 1;
+            prev_index += 1;
+            if (index==30) { index = 0; }
+            if (prev_index==30) { prev_index = 0; }
+          }
+          // Trend maximum for last 30
+          float max = hist_wind[0];
+          for (size_t i = 0; i < 30; ++i) {
+            if (hist_wind[i] > max) {
+              max = hist_wind[i];
+            }
+          }
+
+          // Weather data
+          
+          //it.strftime(5, 20, idfont11), TextAlign::TOP_LEFT, "%H:%M", id(esptime).now());
+         
+          it.printf(50, 20, id(font11), TextAlign::TOP_RIGHT, "%.1f°C", id(weather_temperature).state);
+          it.printf(230, 20, id(font11), TextAlign::TOP_RIGHT, "%.1f hPa", id(pressure_ext).state);
+
+          // it.printf(55, 20, id(font11), TextAlign::BOTTOM_RIGHT, "%s mm", conDict[id(weather_condition).state]);
+
+          // Wind details
+          it.printf(DIRx, DIRy, id(font8), id(my_blue), "%s", name_dir.c_str());
+          it.printf(100, 95, id(font11), TextAlign::BOTTOM_LEFT, "%.1f km/h", id(vento).state);
+          it.printf(100, 80, id(font11), TextAlign::BOTTOM_LEFT, "%.1f°", id(wind_bearing).state);
+          it.printf(230, 120, id(font11), TextAlign::TOP_RIGHT, "TM %2.1f km/h", max);
+          it.printf(50, 120, id(font11), TextAlign::TOP_RIGHT, "%s", name_vento.c_str());
+
+
+      
+
+          // Display trend data linea direzione vento
+          for (size_t i = 0; i < 30; ++i) {
+            if (hist_wind[i]>0) {
+              int a = cerchio_x + ((90-(70*hist_wind[i]/max)) * (cos((hist_dir[i]-90)*PI/180)));
+              int b = cerchio_y + ((90-(70*hist_wind[i]/max)) * (sin((hist_dir[i]-90)*PI/180)));
+              int c = cerchio_x + (raggio * (cos((hist_dir[i]-90)*PI/180)));
+              int d = cerchio_y + (raggio * (sin((hist_dir[i]-90)*PI/180)));
+              it.line(a, b, c, d, grey);
+            }
+          }
+
+
+
+          // Compass rose
+          it.circle(cerchio_x, cerchio_y, raggio); //raggio 50
+          it.print(cerchio_x, 20, id(font11), red, TextAlign::BOTTOM_CENTER, "N");
+          it.print(cerchio_x, 120, id(font11), red, TextAlign::TOP_CENTER, "S");
+          it.print(60, cerchio_y, id(font11), red, TextAlign::CENTER_RIGHT, "W");
+          it.print(180, cerchio_y, id(font11), red, TextAlign::CENTER_LEFT, "E");
+
+
+          // Calculate xy position to plot wind indicator
+          int x = cerchio_x + (raggio * (cos((dir-90)*PI/180)));
+          int y = cerchio_y + (raggio * (sin((dir-90)*PI/180)));
+
+          // Wind pointerpuntatore colorato velocita
+          if (id(vento).state<=11) { it.filled_circle(x, y, 7, light_blue); }
+            else {
+          if (id(vento).state>11 && id(vento).state<=30) { it.filled_circle(x, y, 7, green); } 
+            else {
+          if (id(vento).state>30 && id(vento).state<=60) { it.filled_circle(x, y, 7, orange); } 
+            else {
+          if (id(vento).state>60) { it.filled_circle(x, y, 7, red); } 
+            } } }
+
+
+          // PARTE COMUNE IN FONDO DEI PULSANTI TOUCH
+          // Heater icon
+          if ((id(termostato1).mode) == 0) {
+             it.printf((it.get_width() / 2), (it.get_height() - 15), id(home_font), id(my_gray), TextAlign::BASELINE_CENTER, "\U000F0425");
+           } else {
+             if (id(sensor_caldaia).state) {
+                it.printf((it.get_width() / 2), (it.get_height() - 15), id(home_font), id(my_red), TextAlign::BASELINE_CENTER, "\U000F0238");
+             } else {
+                it.printf((it.get_width() / 2), (it.get_height() - 15), id(home_font), id(my_gray), TextAlign::BASELINE_CENTER, "\U000F0238");
+             }
+          }
+          // Display thermostat desired temperature
+           it.printf((it.get_width() / 2), it.get_height(), id(font8), id(my_red), TextAlign::BASELINE_CENTER, "%.1f°", id(termostato1).target_temperature);
+
+            // Plus Key
+            it.printf(it.get_width(), it.get_height(), id(home_font), id(my_gray), TextAlign::BASELINE_RIGHT, "\U000F0415");
+            // Minus key
+            it.printf(0, it.get_height(), id(home_font), id(my_gray), TextAlign::BASELINE_LEFT, "\U000F0374");
+          // PARTE COMUNE IN FONDO DEI PULSANTI TOUCH
+
+    - id: page3    # pagina 3
+      lambda: |-
+
+          // Draw the graph at position [x=10,y=20]
+          it.graph(30, 40, id(multi_temperature_graph), my_gray);
+          it.printf(20, 10, id(font8), id(my_red), TextAlign::TOP_LEFT, "Casa: %.0f°C", id(temperatura_pur).state);
+          it.printf(120, 10, id(font8), id(my_blue), TextAlign::TOP_LEFT, "Esterno: %.0f°C", id(weather_temperature).state);
+          // simbolo + per aumenta temperatura
+          it.printf(it.get_width(), (it.get_height() - 50), id(home_font), id(my_gray), TextAlign::BASELINE_RIGHT, "\U000F0415");
+          // simbolo meno per diminuisci temperatura
+          it.printf(0, (it.get_height() - 50), id(home_font), id(my_gray), TextAlign::BASELINE_LEFT, "\U000F0374");
+
+          // PARTE COMUNE IN FONDO DEI PULSANTI TOUCH
+          // Heater icon
+          if ((id(termostato1).mode) == 0) {
+             it.printf((it.get_width() / 2), (it.get_height() - 15), id(home_font), id(my_gray), TextAlign::BASELINE_CENTER, "\U000F0425");
+           } else {
+             if (id(sensor_caldaia).state) {
+                it.printf((it.get_width() / 2), (it.get_height() - 15), id(home_font), id(my_red), TextAlign::BASELINE_CENTER, "\U000F0238");
+             } else {
+                it.printf((it.get_width() / 2), (it.get_height() - 15), id(home_font), id(my_gray), TextAlign::BASELINE_CENTER, "\U000F0238");
+             }
+          }
+          // Display thermostat desired temperature
+           it.printf((it.get_width() / 2), it.get_height(), id(font8), id(my_red), TextAlign::BASELINE_CENTER, "%.1f°", id(termostato1).target_temperature);
+
+            // Plus Key
+            it.printf(it.get_width(), it.get_height(), id(home_font), id(my_gray), TextAlign::BASELINE_RIGHT, "\U000F0415");
+            // Minus key
+            it.printf(0, it.get_height(), id(home_font), id(my_gray), TextAlign::BASELINE_LEFT, "\U000F0374");
+          // PARTE COMUNE IN FONDO DEI PULSANTI TOUCH
+
+
+    - id: page4    # pagina 4 
+      lambda: |-
+        int hs = it.get_width() / 2; // Horizontal Spacing = text data horizontal center point
+        int hq = it.get_width() / 4; // text data horizontal center for two vertical lines
+        int vs = it.get_height() / 8; // Vertical Center = text data vertical center point = how many lines
+        int line_gap = 21; // distance of line from center of data text
+        it.rectangle(0,  0, it.get_width(), it.get_height(), id(my_blue));
+         it.rectangle(0, 20, it.get_width(), it.get_height(), id(my_blue));
+      
+        it.strftime(5, 5, id(helvetica_12), id(my_white), TextAlign::TOP_LEFT, "%H:%M:%S", id(esptime).now());
+        it.print(hs, 5, id(helvetica_12), id(my_blue), TextAlign::TOP_CENTER, "${devicename}"); //print title  
+      
+        if (id(system_status).state) {
+          it.print(it.get_width()-5, 5, id(helvetica_12), id(my_green), TextAlign::TOP_RIGHT, "Online");
+        }
+        else {
+          it.print(it.get_width()-5, 5, id(helvetica_12), id(my_red), TextAlign::TOP_RIGHT, "Offline");
+        }
+        it.line(0, it.get_height()-60, it.get_width(), it.get_height()-60, id(my_blue)); // line orizzontale bottom above footer text
+        it.printf(5, it.get_height()-63, id(helvetica_12), id(my_gray), TextAlign::BOTTOM_LEFT, "%s", id(uptime_human).state.c_str());
+        it.printf(hs, it.get_height()-63, id(helvetica_12), id(my_gray), TextAlign::BOTTOM_CENTER, "%.0fdBm", id(wifi_signal_sensor).state);
+        it.printf(it.get_width()-5, it.get_height()-63, id(helvetica_12), id(my_gray), TextAlign::BOTTOM_RIGHT, "%s", id(ip_address).state.c_str());
+
+
+        it.line(0, vs * 3, it.get_width(), vs * 3, id(my_blue));
+        it.line(0, vs * 4, it.get_width(), vs * 4, id(my_blue));
+
+
+        // prova luci
+        it.print(4, 25, id(font11), "Entita:");
+        it.printf(4, 40, id(font11), id(my_yellow), "Luci: %s", id(luci).state.c_str());
+        it.printf(4, 55, id(font11), id(my_yellow), "Consumo: %.0f Watt", id(consumo_t).state);
+        it.print(4, 75, id(icon_font_20), "󰛨");
+
+
+          // PARTE COMUNE IN FONDO DEI PULSANTI TOUCH
+          // Heater icon
+          if ((id(termostato1).mode) == 0) {
+             it.printf((it.get_width() / 2), (it.get_height() - 15), id(home_font), id(my_gray), TextAlign::BASELINE_CENTER, "\U000F0425");
+           } else {
+             if (id(sensor_caldaia).state) {
+                it.printf((it.get_width() / 2), (it.get_height() - 15), id(home_font), id(my_red), TextAlign::BASELINE_CENTER, "\U000F0238");
+             } else {
+                it.printf((it.get_width() / 2), (it.get_height() - 15), id(home_font), id(my_gray), TextAlign::BASELINE_CENTER, "\U000F0238");
+             }
+          }
+          // Display thermostat desired temperature
+           it.printf((it.get_width() / 2), it.get_height(), id(font8), id(my_red), TextAlign::BASELINE_CENTER, "%.1f°", id(termostato1).target_temperature);
+
+            // Plus Key
+            it.printf(it.get_width(), it.get_height(), id(home_font), id(my_gray), TextAlign::BASELINE_RIGHT, "\U000F0415");
+            // Minus key
+            it.printf(0, it.get_height(), id(home_font), id(my_gray), TextAlign::BASELINE_LEFT, "\U000F0374");
+          // PARTE COMUNE IN FONDO DEI PULSANTI TOUCH
+
+
+
+
+
+
+
+
+# Define pins for backlight display and back LED1
+output:
+  - platform: ledc
+    pin: GPIO21
+    id: former_led_pin
+  - platform: ledc
+    id: output_red
+    pin: GPIO4
+    inverted: true
+  - platform: ledc
+    id: output_green
+    pin: GPIO16
+    inverted: true
+  - platform: ledc
+    id: output_blue
+    pin: GPIO17
+    inverted: true
+  # speaker P4
+  - platform: ledc
+    pin: GPIO26
+    id: rtttl_out
+
+# Define a monochromatic, dimmable light for the backlight
+light:
+  - platform: monochromatic
+    output: former_led_pin
+    name: "Display Backlight"
+    id: back_light
+    restore_mode: ALWAYS_ON
+  - platform: rgb
+    name: LED
+    red: output_red
+    id: led
+    green: output_green
+    blue: output_blue
+    restore_mode: ALWAYS_OFF
+
+touchscreen:
+  platform: xpt2046
+  spi_id: touch
+  cs_pin: 33
+  interrupt_pin: 36
+  update_interval: 50ms
+  # report_interval: 1s
+  threshold: 400
+  calibration_x_min: 273
+  calibration_x_max: 3771
+  calibration_y_min: 192
+  calibration_y_max: 3631
+  on_touch:
+    - script.stop: backlight_timer
+    - script.execute: backlight_timer
+  #Uncomment for calibrations
+  #  - lambda: |-
+  #        ESP_LOGI("cal", "x=%d, y=%d, x_raw=%d, y_raw=%0d",
+  #            touch.x,
+  #            touch.y,
+  #            touch.x_raw,
+  #            touch.y_raw
+  #            );
+  #Uncomment for calibrations
+
+#This is the script for turn off the backlight after some seconds of inactivity
+script:
+  id: backlight_timer
+  then:
+  - light.turn_on:
+      id: back_light
+      brightness: 100%
+  - delay: 20s
+  - light.turn_on:
+      id: back_light
+      brightness: 50%
+  - delay: 40s
+  - light.turn_off: back_light
+
+# Exposed switches.
+switch:
+  - platform: restart
+    name: ESP32-2432S028 Restart
